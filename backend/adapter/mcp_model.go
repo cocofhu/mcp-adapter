@@ -73,12 +73,14 @@ func InitServer() {
 
 	}
 
-	for {
-		evt := <-event
-		if evt.Code == AddInterface {
+	go func() {
+		for {
+			evt := <-event
+			if evt.Code == AddInterface {
 
+			}
 		}
-	}
+	}()
 }
 
 func GetServerImpl(path string) http.Handler {
