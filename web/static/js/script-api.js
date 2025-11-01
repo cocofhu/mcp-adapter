@@ -1000,6 +1000,17 @@ class MCPAdapterApp {
 
     // 收集接口表单数据
     collectInterfaceFormData() {
+        const parameters = this.collectParameters();
+        const defaultParams = this.collectDefaultParams();
+        const defaultHeaders = this.collectDefaultHeaders();
+        
+        // 调试输出
+        console.log('收集到的参数:', {
+            parameters,
+            defaultParams,
+            defaultHeaders
+        });
+        
         return {
             appId: document.getElementById('interface-app-id').value,
             name: document.getElementById('interface-name').value,
@@ -1009,9 +1020,9 @@ class MCPAdapterApp {
             url: document.getElementById('endpoint-url').value,
             authType: document.getElementById('auth-type').value,
             enabled: true,
-            parameters: this.collectParameters(),
-            defaultParams: this.collectDefaultParams(),
-            defaultHeaders: this.collectDefaultHeaders()
+            parameters: parameters,
+            defaultParams: defaultParams,
+            defaultHeaders: defaultHeaders
         };
     }
 
@@ -1132,11 +1143,16 @@ class MCPAdapterApp {
     // 收集请求参数
     collectParameters() {
         const parameters = [];
-        document.querySelectorAll('#parameters-list .request-param-item').forEach(item => {
-            const name = item.querySelector('.request-param-name').value.trim();
-            const type = item.querySelector('.request-param-type').value;
-            const required = item.querySelector('.request-param-required').checked;
-            const description = item.querySelector('.request-param-description').value.trim();
+        const items = document.querySelectorAll('#parameters-list .request-param-item');
+        console.log('找到请求参数项:', items.length);
+        
+        items.forEach((item, index) => {
+            const name = item.querySelector('.request-param-name')?.value.trim() || '';
+            const type = item.querySelector('.request-param-type')?.value || 'string';
+            const required = item.querySelector('.request-param-required')?.checked || false;
+            const description = item.querySelector('.request-param-description')?.value.trim() || '';
+            
+            console.log(`请求参数 ${index + 1}:`, { name, type, required, description });
             
             if (name) {
                 parameters.push({ 
@@ -1153,11 +1169,16 @@ class MCPAdapterApp {
     // 收集默认参数
     collectDefaultParams() {
         const params = [];
-        document.querySelectorAll('#default-params-list .default-param-item').forEach(item => {
-            const name = item.querySelector('.default-param-name').value.trim();
-            const value = item.querySelector('.default-param-value').value.trim();
-            const location = item.querySelector('.default-param-location').value;
-            const description = item.querySelector('.default-param-description').value.trim();
+        const items = document.querySelectorAll('#default-params-list .default-param-item');
+        console.log('找到默认参数项:', items.length);
+        
+        items.forEach((item, index) => {
+            const name = item.querySelector('.default-param-name')?.value.trim() || '';
+            const value = item.querySelector('.default-param-value')?.value.trim() || '';
+            const location = item.querySelector('.default-param-location')?.value || 'query';
+            const description = item.querySelector('.default-param-description')?.value.trim() || '';
+            
+            console.log(`默认参数 ${index + 1}:`, { name, value, location, description });
             
             if (name && value) {
                 params.push({ 
@@ -1174,10 +1195,15 @@ class MCPAdapterApp {
     // 收集默认请求头
     collectDefaultHeaders() {
         const headers = [];
-        document.querySelectorAll('#default-headers-list .default-header-item').forEach(item => {
-            const name = item.querySelector('.default-header-name').value.trim();
-            const value = item.querySelector('.default-header-value').value.trim();
-            const description = item.querySelector('.default-header-description').value.trim();
+        const items = document.querySelectorAll('#default-headers-list .default-header-item');
+        console.log('找到默认请求头项:', items.length);
+        
+        items.forEach((item, index) => {
+            const name = item.querySelector('.default-header-name')?.value.trim() || '';
+            const value = item.querySelector('.default-header-value')?.value.trim() || '';
+            const description = item.querySelector('.default-header-description')?.value.trim() || '';
+            
+            console.log(`默认请求头 ${index + 1}:`, { name, value, description });
             
             if (name && value) {
                 // 验证请求头名称格式

@@ -1092,6 +1092,15 @@ input:checked + .slider:before {
     background: #f1f5f9;
 }
 
+/* 参数容器样式 */
+.parameters-container {
+    display: none;
+}
+
+.parameters-container.active {
+    display: block;
+}
+
 /* 移除重复定义，已在上面定义 */
 
 .parameter-description {
