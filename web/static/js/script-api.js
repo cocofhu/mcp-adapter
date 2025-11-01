@@ -1260,7 +1260,9 @@ class MCPAdapterApp {
         const globalLocation = document.getElementById('http-param-location')?.value || 'query';
         document.querySelectorAll('#parameters-list .request-param-item').forEach(item => {
             const name = item.querySelector('.request-param-name')?.value.trim() || '';
-            const type = item.querySelector('.request-param-type')?.value || 'string';
+            const typeRaw = item.querySelector('.request-param-type')?.value || 'string';
+            const allowed = ['string', 'int64', 'bool'];
+            const type = allowed.includes(typeRaw) ? typeRaw : 'string';
             const required = item.querySelector('.request-param-required')?.checked || false;
             const description = item.querySelector('.request-param-description')?.value.trim() || '';
             
@@ -1336,12 +1338,9 @@ class MCPAdapterApp {
                 <div class="parameter-row">
                     <input type="text" class="request-param-name" placeholder="参数名称" required>
                     <select class="request-param-type">
-                        <option value="string">字符串</option>
-                        <option value="integer">整数</option>
-                        <option value="number">数字</option>
-                        <option value="boolean">布尔值</option>
-                        <option value="array">数组</option>
-                        <option value="object">对象</option>
+                        <option value="string">string</option>
+                        <option value="int64">int64</option>
+                        <option value="bool">bool</option>
                     </select>
                     <label class="param-required-label">
                         <input type="checkbox" class="request-param-required"> 必需
@@ -1465,7 +1464,7 @@ class MCPAdapterApp {
                 this.addParameter();
                 const item = container.lastElementChild;
                 item.querySelector('.request-param-name').value = param.name || '';
-                item.querySelector('.request-param-type').value = param.type || 'string';
+                item.querySelector('.request-param-type').value = (['string','int64','bool'].includes(param.type) ? param.type : 'string');
                 item.querySelector('.request-param-required').checked = param.required || false;
                 item.querySelector('.request-param-description').value = param.description || '';
             });
