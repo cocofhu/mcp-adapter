@@ -1257,6 +1257,7 @@ class MCPAdapterApp {
     // 收集请求参数
     collectParameters() {
         const parameters = [];
+        const globalLocation = document.getElementById('http-param-location')?.value || 'query';
         document.querySelectorAll('#parameters-list .request-param-item').forEach(item => {
             const name = item.querySelector('.request-param-name')?.value.trim() || '';
             const type = item.querySelector('.request-param-type')?.value || 'string';
@@ -1268,6 +1269,7 @@ class MCPAdapterApp {
                     name, 
                     type, 
                     required, 
+                    location: globalLocation || 'query',
                     description: description || null 
                 });
             }
@@ -1281,13 +1283,18 @@ class MCPAdapterApp {
         document.querySelectorAll('#default-params-list .default-param-item').forEach(item => {
             const name = item.querySelector('.default-param-name')?.value.trim() || '';
             const value = item.querySelector('.default-param-value')?.value.trim() || '';
+            const type = item.querySelector('.default-param-type')?.value || 'string';
             const location = item.querySelector('.default-param-location')?.value || 'query';
             const description = item.querySelector('.default-param-description')?.value.trim() || '';
             
             if (name && value) {
+                // 仅支持 string, int64, bool，其余忽略或回退为 string
+                const allowed = ['string', 'int64', 'bool'];
+                const finalType = allowed.includes(type) ? type : 'string';
                 params.push({ 
                     name, 
                     value, 
+                    type: finalType,
                     location: location || 'query',
                     description: description || null 
                 });
@@ -1357,6 +1364,11 @@ class MCPAdapterApp {
                 <div class="parameter-row">
                     <input type="text" class="default-param-name" placeholder="参数名称（如：api_key）" required>
                     <input type="text" class="default-param-value" placeholder="参数值" required>
+                    <select class="default-param-type">
+                        <option value="string">string</option>
+                        <option value="int64">int64</option>
+                        <option value="bool">bool</option>
+                    </select>
                     <select class="default-param-location">
                         <option value="query">URL参数</option>
                         <option value="body">请求体</option>
@@ -1441,6 +1453,13 @@ class MCPAdapterApp {
         const container = document.getElementById('parameters-list');
         container.innerHTML = '';
         
+        // 如果参数包含位置，设置全局位置选择器
+        const firstParamLocation = parameters && parameters.length > 0 ? parameters[0].location : null;
+        const locationSelect = document.getElementById('http-param-location');
+        if (locationSelect && firstParamLocation) {
+            locationSelect.value = firstParamLocation;
+        }
+        
         if (parameters && parameters.length > 0) {
             parameters.forEach(param => {
                 this.addParameter();
@@ -1464,6 +1483,7 @@ class MCPAdapterApp {
                 const item = container.lastElementChild;
                 item.querySelector('.default-param-name').value = param.name || '';
                 item.querySelector('.default-param-value').value = param.value || '';
+                item.querySelector('.default-param-type').value = (['string','int64','bool'].includes(param.type) ? param.type : 'string');
                 item.querySelector('.default-param-location').value = param.location || 'query';
                 item.querySelector('.default-param-description').value = param.description || '';
             });
