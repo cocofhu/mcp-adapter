@@ -1,0 +1,125 @@
+package handlers
+
+import (
+	"encoding/json"
+	"mcp-adapter/backend/database"
+	"mcp-adapter/backend/models"
+	"net/http"
+	"strconv"
+
+	"github.com/gorilla/mux"
+)
+
+// CreateApplication 创建应用
+func CreateApplication(w http.ResponseWriter, r *http.Request) {
+	var app models.Application
+	if err := json.NewDecoder(r.Body).Decode(&app); err != nil {
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+
+	db := database.GetDB()
+	if err := db.Create(&app).Error; err != nil {
+		http.Error(w, "Failed to create application", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(app)
+}
+
+// GetApplications 获取所有应用
+func GetApplications(w http.ResponseWriter, r *http.Request) {
+	var apps []models.Application
+	db := database.GetDB()
+
+	if err := db.Find(&apps).Error; err != nil {
+		http.Error(w, "Failed to fetch applications", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(apps)
+}
+
+// GetApplication 获取单个应用
+func GetApplication(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid application ID", http.StatusBadRequest)
+		return
+	}
+
+	var app models.Application
+	db := database.GetDB()
+
+	if err := db.First(&app, id).Error; err != nil {
+		http.Error(w, "Application not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(app)
+}
+
+// UpdateApplication 更新应用
+func UpdateApplication(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid application ID", http.StatusBadRequest)
+		return
+	}
+
+	var app models.Application
+	db := database.GetDB()
+
+	if err := db.First(&app, id).Error; err != nil {
+		http.Error(w, "Application not found", http.StatusNotFound)
+		return
+	}
+
+	var updateData models.Application
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+
+	// 保持原有ID
+	updateData.ID = app.ID
+	if err := db.Save(&updateData).Error; err != nil {
+		http.Error(w, "Failed to update application", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updateData)
+}
+
+// DeleteApplication 删除应用
+func DeleteApplication(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid application ID", http.StatusBadRequest)
+		return
+	}
+
+	db := database.GetDB()
+
+	// 检查应用是否存在
+	var app models.Application
+	if err := db.First(&app, id).Error; err != nil {
+		http.Error(w, "Application not found", http.StatusNotFound)
+		return
+	}
+
+	// 删除应用及其关联的接口
+	if err := db.Delete(&app).Error; err != nil {
+		http.Error(w, "Failed to delete application", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
