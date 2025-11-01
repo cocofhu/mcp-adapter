@@ -669,7 +669,7 @@ class MCPAdapterApp {
                 <div class="app-header">
                     <div class="app-info">
                         <h3 class="app-name">${app.name}</h3>
-                        <span class="app-version">${app.path || 'v1.0.0'}</span>
+                        <span class="app-path">${app.path || '未设置路径'}</span>
                     </div>
                     <div class="app-actions">
                         <button class="btn-icon" onclick="app.editApplication(${app.id})" title="编辑">
@@ -689,8 +689,8 @@ class MCPAdapterApp {
                         <span>接口数量: ${this.getInterfaceCountForApp(app.id)}</span>
                     </div>
                     <div class="stat-item">
-                        <i class="fas fa-calendar"></i>
-                        <span>创建时间: ${new Date(app.created_at).toLocaleDateString()}</span>
+                        <i class="fas fa-route"></i>
+                        <span>路径: ${app.path || '未设置'}</span>
                     </div>
                     <div class="stat-item">
                         <i class="fas fa-${app.enabled ? 'check-circle' : 'times-circle'}"></i>
@@ -860,6 +860,15 @@ class MCPAdapterApp {
             'app-name': {
                 validator: (value) => value.trim().length >= 2,
                 message: '应用名称至少需要2个字符'
+            },
+            'app-path': {
+                validator: (value) => {
+                    const trimmed = value.trim();
+                    if (trimmed.length === 0) return true; // 路径是可选的
+                    // 验证路径格式：可以是 /path 或 path 格式，不能包含特殊字符
+                    return /^[a-zA-Z0-9\-_\/\.]*$/.test(trimmed);
+                },
+                message: '应用路径只能包含字母、数字、连字符、下划线、斜杠和点'
             }
         });
 
@@ -872,7 +881,7 @@ class MCPAdapterApp {
         const appData = {
             name: document.getElementById('app-name').value.trim(),
             description: document.getElementById('app-description').value.trim(),
-            path: document.getElementById('app-version').value.trim(),
+            path: document.getElementById('app-path').value.trim(),
             protocol: 'http',
             enabled: true
         };
@@ -916,7 +925,7 @@ class MCPAdapterApp {
         // 填充表单数据
         document.getElementById('app-name').value = app.name;
         document.getElementById('app-description').value = app.description || '';
-        document.getElementById('app-version').value = app.path || '';
+        document.getElementById('app-path').value = app.path || '';
         
         // 显示模态框，传入 isEdit = true 参数
         this.showCreateAppModal(true);
@@ -932,6 +941,15 @@ class MCPAdapterApp {
             'app-name': {
                 validator: (value) => value.trim().length >= 2,
                 message: '应用名称至少需要2个字符'
+            },
+            'app-path': {
+                validator: (value) => {
+                    const trimmed = value.trim();
+                    if (trimmed.length === 0) return true; // 路径是可选的
+                    // 验证路径格式：可以是 /path 或 path 格式，不能包含特殊字符
+                    return /^[a-zA-Z0-9\-_\/\.]*$/.test(trimmed);
+                },
+                message: '应用路径只能包含字母、数字、连字符、下划线、斜杠和点'
             }
         });
 
@@ -944,7 +962,7 @@ class MCPAdapterApp {
         const appData = {
             name: document.getElementById('app-name').value.trim(),
             description: document.getElementById('app-description').value.trim(),
-            path: document.getElementById('app-version').value.trim(),
+            path: document.getElementById('app-path').value.trim(),
             protocol: 'http',
             enabled: true
         };
