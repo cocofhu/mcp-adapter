@@ -19,7 +19,7 @@ func CreateInterface(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db := database.GetDB()
-	
+
 	// 验证应用是否存在
 	var app models.Application
 	if err := db.First(&app, iface.AppID).Error; err != nil {

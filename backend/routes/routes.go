@@ -32,8 +32,15 @@ func SetupRoutes() *mux.Router {
 	api.HandleFunc("/interfaces/{id}", handlers.DeleteInterface).Methods("DELETE")
 
 	// 静态文件服务
-	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./"))).Methods("GET")
+	// 静态目录
+	staticFileDirectory := http.Dir("./web/static")
+	staticFileHandler := http.StripPrefix("/static/", http.FileServer(staticFileDirectory))
+	r.PathPrefix("/static/").Handler(staticFileHandler)
 
+	// 主页
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./web/static/index.html")
+	})
 	return r
 }
 
@@ -42,7 +49,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)

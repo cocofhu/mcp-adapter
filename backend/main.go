@@ -5,11 +5,13 @@ import (
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/routes"
 	"net/http"
+
+	_ "modernc.org/sqlite"
 )
 
 func main() {
 	// 初始化数据库
-	database.InitDatabase()
+	database.InitDatabase("mcp-adapter.db")
 
 	// 设置路由
 	router := routes.SetupRoutes()
