@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP 接口管理系统</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="style.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-server"></i> API 管理器</h2>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-tab="applications">
+                    <i class="fas fa-folder"></i>
+                    <span>应用管理</span>
+                </li>
+                <li class="nav-item" data-tab="interfaces">
+                    <i class="fas fa-list"></i>
+                    <span>接口列表</span>
+                </li>
+                <li class="nav-item" data-tab="add-interface">
+                    <i class="fas fa-plus"></i>
+                    <span>添加接口</span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 头部 -->
+            <header class="header">
+                <div class="header-left">
+                    <h1 id="page-title">接口列表</h1>
+                    <p id="page-subtitle">管理和转换不同协议的接口</p>
+                </div>
+                <div class="header-right">
+                    <button class="btn btn-primary" id="quick-add-btn">
+                        <i class="fas fa-plus"></i> 快速添加
+                    </button>
+                </div>
+            </header>
+
+            <!-- 应用管理页面 -->
+            <div class="tab-content active" id="applications-tab">
+                <div class="content-header">
+                    <div class="search-bar">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="搜索应用名称..." id="app-search-input">
+                    </div>
+                    <div class="filter-controls">
+                        <button class="btn btn-primary" id="create-app-btn">
+                            <i class="fas fa-plus"></i> 创建应用
+                        </button>
+                    </div>
+                </div>
+
+                <div class="applications-grid" id="applications-grid">
+                    <!-- 应用卡片将通过 JavaScript 动态生成 -->
+                </div>
+            </div>
+
+            <!-- 接口列表页面 -->
+            <div class="tab-content" id="interfaces-tab">
+                <div class="content-header">
+                    <div class="app-selector">
+                        <label for="current-app-select">当前应用:</label>
+                        <select id="current-app-select">
+                            <option value="">请选择应用</option>
+                        </select>
+                    </div>
+                    <div class="search-bar">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="搜索接口名称、协议类型..." id="search-input">
+                    </div>
+                    <div class="filter-controls">
+                        <select id="protocol-filter">
+                            <option value="">所有协议</option>
+                            <option value="http">HTTP/REST</option>
+                        </select>
+                        <select id="status-filter">
+                            <option value="">所有状态</option>
+                            <option value="enabled">已启用</option>
+                            <option value="disabled">已禁用</option>
+                            <option value="active">已激活</option>
+                            <option value="inactive">未激活</option>
+                            <option value="error">错误</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="interfaces-grid" id="interfaces-grid">
+                    <!-- 接口卡片将通过 JavaScript 动态生成 -->
+                </div>
+            </div>
+
+            <!-- 添加接口页面 -->
+            <div class="tab-content" id="add-interface-tab">
+                <div class="form-container">
+                    <form id="add-interface-form">
+                        <div class="form-section">
+                            <h3>基本信息</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="interface-app-id">所属应用 *</label>
+                                    <select id="interface-app-id" required>
+                                        <option value="">请选择应用</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="interface-name">接口名称 *</label>
+                                    <input type="text" id="interface-name" required placeholder="例如: weather_api">
+                                </div>
+                                <div class="form-group">
+                                    <label for="interface-description">描述</label>
+                                    <input type="text" id="interface-description" placeholder="接口功能描述">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="protocol-type">协议类型 *</label>
+                                    <select id="protocol-type" required>
+                                        <option value="http" selected>HTTP/REST</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="http-method">HTTP 方法</label>
+                                    <select id="http-method">
+                                        <option value="GET">GET</option>
+                                        <option value="POST">POST</option>
+                                        <option value="PUT">PUT</option>
+                                        <option value="DELETE">DELETE</option>
+                                        <option value="PATCH">PATCH</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+
+
+                        <div class="form-section">
+                            <h3>连接配置</h3>
+                            <div class="form-row">
+                                <div class="form-group full-width">
+                                    <label for="endpoint-url">端点 URL *</label>
+                                    <input type="url" id="endpoint-url" required placeholder="https://api.example.com/weather">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="auth-type">认证类型</label>
+                                    <select id="auth-type">
+                                        <option value="none">无认证</option>
+                                        <option value="bearer">Bearer Token</option>
+                                        <option value="basic">Basic Auth</option>
+                                        <option value="api-key">API Key</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="auth-value">认证值</label>
+                                    <input type="password" id="auth-value" placeholder="认证凭据">
+                                </div>
+                            </div>
+                        </div>
+
+
+
+                        <div class="form-section">
+                            <h3>参数配置</h3>
+                            
+                            <!-- 参数配置标签页 -->
+                            <div class="parameter-tabs">
+                                <button type="button" class="tab-btn active" data-tab="request-params" onclick="app.switchParameterTab('request-params')">
+                                    <i class="fas fa-cog"></i> 请求参数
+                                </button>
+                                <button type="button" class="tab-btn" data-tab="default-params" onclick="app.switchParameterTab('default-params')">
+                                    <i class="fas fa-star"></i> 默认参数
+                                </button>
+                                <button type="button" class="tab-btn" data-tab="default-headers" onclick="app.switchParameterTab('default-headers')">
+                                    <i class="fas fa-file-alt"></i> 默认请求头
+                                </button>
+                            </div>
+
+                            <!-- 请求参数配置 -->
+                            <div class="parameters-container active" id="request-params">
+                                <div class="parameters-header">
+                                    <h4>请求参数定义</h4>
+                                    <div class="parameter-location-config" id="parameter-location-config" style="display: none;">
+                                        <div class="form-group">
+                                            <label for="http-param-location">HTTP参数位置</label>
+                                            <select id="http-param-location">
+                                                <option value="query">URL查询参数 (?param=value)</option>
+                                                <option value="body">请求体 (Request Body)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="parameter-info" id="input-param-info">
+                                        <small>参数位置将根据协议类型自动确定</small>
+                                    </div>
+                                    <button type="button" class="btn btn-secondary" id="add-parameter-btn">
+                                        <i class="fas fa-plus"></i> 添加参数
+                                    </button>
+                                </div>
+                                <div class="parameters-list" id="parameters-list">
+                                    <!-- 参数项将通过 JavaScript 动态生成 -->
+                                </div>
+                            </div>
+
+                            <!-- 默认参数配置 -->
+                            <div class="parameters-container" id="default-params">
+                                <div class="parameters-header">
+                                    <h4>默认参数值</h4>
+                                    <p class="parameter-description">
+                                        <i class="fas fa-info-circle"></i>
+                                        这些参数会在每次请求时自动添加，可以设置API密钥、版本号等固定参数
+                                    </p>
+                                    <button type="button" class="btn btn-secondary" id="add-default-param-btn">
+                                        <i class="fas fa-plus"></i> 添加默认参数
+                                    </button>
+                                </div>
+                                <div class="parameters-list" id="default-params-list">
+                                    <!-- 默认参数项将通过 JavaScript 动态生成 -->
+                                </div>
+                            </div>
+
+                            <!-- 默认请求头配置 -->
+                            <div class="parameters-container" id="default-headers">
+                                <div class="parameters-header">
+                                    <h4>默认请求头</h4>
+                                    <p class="parameter-description">
+                                        <i class="fas fa-info-circle"></i>
+                                        这些请求头会在每次请求时自动添加，如Content-Type、User-Agent等
+                                    </p>
+                                    <button type="button" class="btn btn-secondary" id="add-default-header-btn">
+                                        <i class="fas fa-plus"></i> 添加请求头
+                                    </button>
+                                </div>
+                                <div class="parameters-list" id="default-headers-list">
+                                    <!-- 默认请求头项将通过 JavaScript 动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" id="test-interface-btn">
+                                <i class="fas fa-play"></i> 测试接口
+                            </button>
+                            <button type="submit" class="btn btn-primary" id="save-interface-btn">
+                                <i class="fas fa-save"></i> 保存接口
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+
+        </main>
+    </div>
+
+    <!-- 接口详情模态框 -->
+    <div class="modal" id="interface-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">接口详情</h3>
+                <button class="modal-close" id="modal-close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- 模态框内容 -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="modal-cancel-btn">取消</button>
+                <button class="btn btn-primary" id="modal-confirm-btn">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建应用模态框 -->
+    <div class="modal" id="create-app-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="create-app-modal-title">创建应用</h3>
+                <button class="modal-close" id="create-app-close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="create-app-form">
+                    <div class="form-group">
+                        <label for="app-name">应用名称 *</label>
+                        <input type="text" id="app-name" required placeholder="例如: 天气服务API">
+                    </div>
+                    <div class="form-group">
+                        <label for="app-description">应用描述</label>
+                        <textarea id="app-description" rows="3" placeholder="描述应用的功能和用途"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="app-version">版本号</label>
+                        <input type="text" id="app-version" placeholder="例如: v1.0.0" value="v1.0.0">
+                    </div>
+                    <div class="form-group">
+                        <label for="app-base-url">基础URL</label>
+                        <input type="url" id="app-base-url" placeholder="例如: https://api.example.com">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="create-app-cancel-btn">取消</button>
+                <button class="btn btn-primary" id="create-app-confirm-btn">创建应用</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
