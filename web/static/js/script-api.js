@@ -693,6 +693,10 @@ class MCPAdapterApp {
                         <span>路径: ${app.path || '未设置'}</span>
                     </div>
                     <div class="stat-item">
+                        <i class="fas fa-plug"></i>
+                        <span>协议: ${this.getProtocolDisplayName(app.protocol)}</span>
+                    </div>
+                    <div class="stat-item">
                         <i class="fas fa-${app.enabled ? 'check-circle' : 'times-circle'}"></i>
                         <span>${app.enabled ? '已启用' : '已禁用'}</span>
                     </div>
@@ -709,6 +713,16 @@ class MCPAdapterApp {
     // 获取应用的接口数量
     getInterfaceCountForApp(appId) {
         return this.interfaces.filter(iface => iface.app_id === appId).length;
+    }
+
+    // 获取协议显示名称
+    getProtocolDisplayName(protocol) {
+        const protocolNames = {
+            'stdio': 'STDIO',
+            'sse': 'SSE',
+            'streamable': 'Streamable'
+        };
+        return protocolNames[protocol] || protocol || 'STDIO';
     }
 
     // 查看应用的接口
@@ -869,6 +883,10 @@ class MCPAdapterApp {
                     return /^[a-zA-Z0-9\-_\/\.]*$/.test(trimmed);
                 },
                 message: '应用路径只能包含字母、数字、连字符、下划线、斜杠和点'
+            },
+            'app-protocol': {
+                validator: (value) => ['stdio', 'sse', 'streamable'].includes(value),
+                message: '请选择有效的协议类型'
             }
         });
 
@@ -882,7 +900,7 @@ class MCPAdapterApp {
             name: document.getElementById('app-name').value.trim(),
             description: document.getElementById('app-description').value.trim(),
             path: document.getElementById('app-path').value.trim(),
-            protocol: 'http',
+            protocol: document.getElementById('app-protocol').value,
             enabled: true
         };
 
@@ -926,6 +944,7 @@ class MCPAdapterApp {
         document.getElementById('app-name').value = app.name;
         document.getElementById('app-description').value = app.description || '';
         document.getElementById('app-path').value = app.path || '';
+        document.getElementById('app-protocol').value = app.protocol || 'stdio';
         
         // 显示模态框，传入 isEdit = true 参数
         this.showCreateAppModal(true);
@@ -950,6 +969,10 @@ class MCPAdapterApp {
                     return /^[a-zA-Z0-9\-_\/\.]*$/.test(trimmed);
                 },
                 message: '应用路径只能包含字母、数字、连字符、下划线、斜杠和点'
+            },
+            'app-protocol': {
+                validator: (value) => ['stdio', 'sse', 'streamable'].includes(value),
+                message: '请选择有效的协议类型'
             }
         });
 
@@ -963,7 +986,7 @@ class MCPAdapterApp {
             name: document.getElementById('app-name').value.trim(),
             description: document.getElementById('app-description').value.trim(),
             path: document.getElementById('app-path').value.trim(),
-            protocol: 'http',
+            protocol: document.getElementById('app-protocol').value,
             enabled: true
         };
 

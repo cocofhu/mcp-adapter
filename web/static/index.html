@@ -306,6 +306,15 @@
                         <input type="text" id="app-path" placeholder="例如: /api/weather 或 weather-service">
                         <small class="form-help">应用的路径标识，用于区分不同的应用服务</small>
                     </div>
+                    <div class="form-group">
+                        <label for="app-protocol" class="required">应用协议</label>
+                        <select id="app-protocol" required>
+                            <option value="stdio">STDIO - 标准输入输出</option>
+                            <option value="sse">SSE - 服务器发送事件</option>
+                            <option value="streamable">Streamable - 流式传输</option>
+                        </select>
+                        <small class="form-help">选择应用与外部系统通信的协议类型</small>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
