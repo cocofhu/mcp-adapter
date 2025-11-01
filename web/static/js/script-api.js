@@ -221,15 +221,24 @@ class MCPAdapterApp {
         // 创建通知元素
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
-        notification.textContent = message;
+        
+        // 创建消息文本节点
+        const messageSpan = document.createElement('span');
+        messageSpan.textContent = message;
+        notification.appendChild(messageSpan);
         
         // 添加到页面
         document.body.appendChild(notification);
         
-        // 3秒后自动移除
+        // 3秒后开始淡出动画
         setTimeout(() => {
             if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
+                notification.style.animation = 'slideOut 0.3s ease-in forwards';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
             }
         }, 3000);
     }
@@ -957,24 +966,44 @@ const notificationStyles = `
         position: fixed;
         top: 20px;
         right: 20px;
-        padding: 12px 20px;
-        border-radius: 4px;
+        padding: 16px 20px;
+        border-radius: 8px;
         color: white;
         font-weight: 500;
         z-index: 10000;
         animation: slideIn 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 300px;
+        max-width: 500px;
     }
     
     .notification-success {
-        background-color: #4CAF50;
+        background: linear-gradient(135deg, #10b981, #059669);
     }
     
     .notification-error {
-        background-color: #f44336;
+        background: linear-gradient(135deg, #ef4444, #dc2626);
     }
     
     .notification-info {
-        background-color: #2196F3;
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    }
+    
+    .notification::before {
+        content: "✓";
+        font-weight: bold;
+        font-size: 16px;
+    }
+    
+    .notification-error::before {
+        content: "✕";
+    }
+    
+    .notification-info::before {
+        content: "ℹ";
     }
     
     @keyframes slideIn {
@@ -985,6 +1014,17 @@ const notificationStyles = `
         to {
             transform: translateX(0);
             opacity: 1;
+        }
+    }
+    
+    @keyframes slideOut {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
         }
     }
 `;

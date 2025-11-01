@@ -106,7 +106,7 @@
                             <h3>基本信息</h3>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="interface-app-id">所属应用 *</label>
+                                    <label for="interface-app-id" class="required">所属应用</label>
                                     <select id="interface-app-id" required>
                                         <option value="">请选择应用</option>
                                     </select>
@@ -114,7 +114,7 @@
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="interface-name">接口名称 *</label>
+                                    <label for="interface-name" class="required">接口名称</label>
                                     <input type="text" id="interface-name" required placeholder="例如: weather_api">
                                 </div>
                                 <div class="form-group">
@@ -124,7 +124,7 @@
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="protocol-type">协议类型 *</label>
+                                    <label for="protocol-type" class="required">协议类型</label>
                                     <select id="protocol-type" required>
                                         <option value="http" selected>HTTP/REST</option>
                                     </select>
@@ -148,7 +148,7 @@
                             <h3>连接配置</h3>
                             <div class="form-row">
                                 <div class="form-group full-width">
-                                    <label for="endpoint-url">端点 URL *</label>
+                                    <label for="endpoint-url" class="required">端点 URL</label>
                                     <input type="url" id="endpoint-url" required placeholder="https://api.example.com/weather">
                                 </div>
                             </div>
@@ -294,7 +294,7 @@
             <div class="modal-body">
                 <form id="create-app-form">
                     <div class="form-group">
-                        <label for="app-name">应用名称 *</label>
+                        <label for="app-name" class="required">应用名称</label>
                         <input type="text" id="app-name" required placeholder="例如: 天气服务API">
                     </div>
                     <div class="form-group">
