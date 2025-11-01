@@ -1,5 +1,5 @@
 // API 基础配置
-const API_BASE_URL = 'http://192.168.2.17:8080/api';
+const API_BASE_URL = 'api';
 
 // 全局状态管理
 class MCPAdapterApp {
