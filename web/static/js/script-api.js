@@ -275,6 +275,26 @@ class MCPAdapterApp {
             createAppCloseBtn.addEventListener('click', () => this.hideCreateAppModal());
         }
 
+        // 点击模态框外部关闭
+        const createAppModal = document.getElementById('create-app-modal');
+        if (createAppModal) {
+            createAppModal.addEventListener('click', (e) => {
+                if (e.target === createAppModal) {
+                    this.hideCreateAppModal();
+                }
+            });
+        }
+
+        // ESC 键关闭模态框
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('create-app-modal');
+                if (modal && modal.style.display === 'flex') {
+                    this.hideCreateAppModal();
+                }
+            }
+        });
+
         // 接口表单提交
         const addInterfaceForm = document.getElementById('add-interface-form');
         if (addInterfaceForm) {
@@ -558,12 +578,15 @@ class MCPAdapterApp {
     }
 
     // 显示创建应用模态框
-    showCreateAppModal() {
+    showCreateAppModal(isEdit = false) {
         const modal = document.getElementById('create-app-modal');
         if (modal) {
             modal.style.display = 'flex';
-            // 清空表单
-            document.getElementById('create-app-form').reset();
+            // 只有在创建新应用时才清空表单
+            if (!isEdit) {
+                document.getElementById('create-app-form').reset();
+                this.resetCreateAppModal();
+            }
         }
     }
 
@@ -572,6 +595,8 @@ class MCPAdapterApp {
         const modal = document.getElementById('create-app-modal');
         if (modal) {
             modal.style.display = 'none';
+            // 重置模态框状态
+            this.resetCreateAppModal();
         }
     }
 
@@ -606,18 +631,19 @@ class MCPAdapterApp {
         const app = this.applications.find(a => a.id === id);
         if (!app) return;
 
-        // 填充表单数据
-        document.getElementById('app-name').value = app.name;
-        document.getElementById('app-description').value = app.description || '';
-        document.getElementById('app-version').value = app.path || '';
-        
         // 更新模态框标题和按钮
         document.getElementById('create-app-modal-title').textContent = '编辑应用';
         const confirmBtn = document.getElementById('create-app-confirm-btn');
         confirmBtn.textContent = '更新应用';
         confirmBtn.onclick = () => this.handleUpdateApp(id);
         
-        this.showCreateAppModal();
+        // 填充表单数据
+        document.getElementById('app-name').value = app.name;
+        document.getElementById('app-description').value = app.description || '';
+        document.getElementById('app-version').value = app.path || '';
+        
+        // 显示模态框，传入 isEdit = true 参数
+        this.showCreateAppModal(true);
     }
 
     // 处理更新应用
@@ -638,8 +664,6 @@ class MCPAdapterApp {
         try {
             await this.updateApplication(id, appData);
             this.hideCreateAppModal();
-            // 重置模态框
-            this.resetCreateAppModal();
         } catch (error) {
             // 错误已在 updateApplication 中处理
         }
@@ -651,6 +675,8 @@ class MCPAdapterApp {
         const confirmBtn = document.getElementById('create-app-confirm-btn');
         confirmBtn.textContent = '创建应用';
         confirmBtn.onclick = () => this.handleCreateApp();
+        // 清空表单
+        document.getElementById('create-app-form').reset();
     }
 
     // 删除应用确认
