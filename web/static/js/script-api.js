@@ -1022,13 +1022,52 @@ class MCPAdapterApp {
             return false;
         }
         
-        if (!data.name) {
-            this.showNotification('请输入接口名称', 'error');
+        if (!data.name || data.name.trim().length < 2) {
+            this.showNotification('接口名称至少需要2个字符', 'error');
             return false;
         }
         
         if (!data.url) {
             this.showNotification('请输入端点URL', 'error');
+            return false;
+        }
+        
+        // 验证URL格式
+        try {
+            new URL(data.url);
+        } catch (e) {
+            this.showNotification('请输入有效的URL地址', 'error');
+            return false;
+        }
+        
+        // 验证参数名称唯一性
+        const paramNames = data.parameters.map(p => p.name);
+        const duplicateParams = paramNames.filter((name, index) => paramNames.indexOf(name) !== index);
+        if (duplicateParams.length > 0) {
+            this.showNotification(`请求参数名称重复: ${duplicateParams.join(', ')}`, 'error');
+            return false;
+        }
+        
+        // 验证默认参数名称唯一性
+        const defaultParamNames = data.defaultParams.map(p => p.name);
+        const duplicateDefaultParams = defaultParamNames.filter((name, index) => defaultParamNames.indexOf(name) !== index);
+        if (duplicateDefaultParams.length > 0) {
+            this.showNotification(`默认参数名称重复: ${duplicateDefaultParams.join(', ')}`, 'error');
+            return false;
+        }
+        
+        // 验证请求头名称唯一性
+        const headerNames = data.defaultHeaders.map(h => h.name);
+        const duplicateHeaders = headerNames.filter((name, index) => headerNames.indexOf(name) !== index);
+        if (duplicateHeaders.length > 0) {
+            this.showNotification(`请求头名称重复: ${duplicateHeaders.join(', ')}`, 'error');
+            return false;
+        }
+        
+        // 验证请求头名称格式
+        const invalidHeaders = data.defaultHeaders.filter(h => !/^[a-zA-Z0-9\-_]+$/.test(h.name));
+        if (invalidHeaders.length > 0) {
+            this.showNotification(`请求头名称格式无效: ${invalidHeaders.map(h => h.name).join(', ')}`, 'error');
             return false;
         }
         
@@ -1090,17 +1129,22 @@ class MCPAdapterApp {
         }
     }
 
-    // 收集参数
+    // 收集请求参数
     collectParameters() {
         const parameters = [];
-        document.querySelectorAll('#parameters-list .parameter-item').forEach(item => {
-            const name = item.querySelector('.param-name').value;
-            const type = item.querySelector('.param-type').value;
-            const required = item.querySelector('.param-required').checked;
-            const description = item.querySelector('.param-description').value;
+        document.querySelectorAll('#parameters-list .request-param-item').forEach(item => {
+            const name = item.querySelector('.request-param-name').value.trim();
+            const type = item.querySelector('.request-param-type').value;
+            const required = item.querySelector('.request-param-required').checked;
+            const description = item.querySelector('.request-param-description').value.trim();
             
             if (name) {
-                parameters.push({ name, type, required, description });
+                parameters.push({ 
+                    name, 
+                    type, 
+                    required, 
+                    description: description || null 
+                });
             }
         });
         return parameters;
@@ -1109,13 +1153,19 @@ class MCPAdapterApp {
     // 收集默认参数
     collectDefaultParams() {
         const params = [];
-        document.querySelectorAll('#default-params-list .parameter-item').forEach(item => {
-            const name = item.querySelector('.param-name').value;
-            const value = item.querySelector('.param-value').value;
-            const description = item.querySelector('.param-description').value;
+        document.querySelectorAll('#default-params-list .default-param-item').forEach(item => {
+            const name = item.querySelector('.default-param-name').value.trim();
+            const value = item.querySelector('.default-param-value').value.trim();
+            const location = item.querySelector('.default-param-location').value;
+            const description = item.querySelector('.default-param-description').value.trim();
             
-            if (name) {
-                params.push({ name, value, description });
+            if (name && value) {
+                params.push({ 
+                    name, 
+                    value, 
+                    location: location || 'query',
+                    description: description || null 
+                });
             }
         });
         return params;
@@ -1124,39 +1174,51 @@ class MCPAdapterApp {
     // 收集默认请求头
     collectDefaultHeaders() {
         const headers = [];
-        document.querySelectorAll('#default-headers-list .parameter-item').forEach(item => {
-            const name = item.querySelector('.param-name').value;
-            const value = item.querySelector('.param-value').value;
-            const description = item.querySelector('.param-description').value;
+        document.querySelectorAll('#default-headers-list .default-header-item').forEach(item => {
+            const name = item.querySelector('.default-header-name').value.trim();
+            const value = item.querySelector('.default-header-value').value.trim();
+            const description = item.querySelector('.default-header-description').value.trim();
             
-            if (name) {
-                headers.push({ name, value, description });
+            if (name && value) {
+                // 验证请求头名称格式
+                if (!/^[a-zA-Z0-9\-_]+$/.test(name)) {
+                    console.warn(`Invalid header name: ${name}`);
+                    return;
+                }
+                
+                headers.push({ 
+                    name, 
+                    value, 
+                    description: description || null 
+                });
             }
         });
         return headers;
     }
 
-    // 添加参数
+    // 添加请求参数
     addParameter() {
         const container = document.getElementById('parameters-list');
         const parameterHtml = `
-            <div class="parameter-item">
+            <div class="parameter-item request-param-item">
                 <div class="parameter-row">
-                    <input type="text" class="param-name" placeholder="参数名称" required>
-                    <select class="param-type">
+                    <input type="text" class="request-param-name" placeholder="参数名称" required>
+                    <select class="request-param-type">
                         <option value="string">字符串</option>
                         <option value="integer">整数</option>
                         <option value="number">数字</option>
                         <option value="boolean">布尔值</option>
+                        <option value="array">数组</option>
+                        <option value="object">对象</option>
                     </select>
                     <label class="param-required-label">
-                        <input type="checkbox" class="param-required"> 必需
+                        <input type="checkbox" class="request-param-required"> 必需
                     </label>
-                    <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()">
+                    <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除参数">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <input type="text" class="param-description" placeholder="参数描述">
+                <input type="text" class="request-param-description" placeholder="参数描述（可选）">
             </div>
         `;
         container.insertAdjacentHTML('beforeend', parameterHtml);
@@ -1166,15 +1228,19 @@ class MCPAdapterApp {
     addDefaultParameter() {
         const container = document.getElementById('default-params-list');
         const parameterHtml = `
-            <div class="parameter-item">
+            <div class="parameter-item default-param-item">
                 <div class="parameter-row">
-                    <input type="text" class="param-name" placeholder="参数名称" required>
-                    <input type="text" class="param-value" placeholder="参数值" required>
-                    <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()">
+                    <input type="text" class="default-param-name" placeholder="参数名称（如：api_key）" required>
+                    <input type="text" class="default-param-value" placeholder="参数值" required>
+                    <select class="default-param-location">
+                        <option value="query">URL参数</option>
+                        <option value="body">请求体</option>
+                    </select>
+                    <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除默认参数">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <input type="text" class="param-description" placeholder="参数描述">
+                <input type="text" class="default-param-description" placeholder="参数说明（如：API访问密钥）">
             </div>
         `;
         container.insertAdjacentHTML('beforeend', parameterHtml);
@@ -1184,18 +1250,58 @@ class MCPAdapterApp {
     addDefaultHeader() {
         const container = document.getElementById('default-headers-list');
         const headerHtml = `
-            <div class="parameter-item">
+            <div class="parameter-item default-header-item">
                 <div class="parameter-row">
-                    <input type="text" class="param-name" placeholder="请求头名称" required>
-                    <input type="text" class="param-value" placeholder="请求头值" required>
-                    <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()">
+                    <input type="text" class="default-header-name" placeholder="请求头名称（如：Content-Type）" required>
+                    <input type="text" class="default-header-value" placeholder="请求头值（如：application/json）" required>
+                    <select class="default-header-preset">
+                        <option value="">自定义</option>
+                        <option value="Content-Type">Content-Type</option>
+                        <option value="Authorization">Authorization</option>
+                        <option value="User-Agent">User-Agent</option>
+                        <option value="Accept">Accept</option>
+                        <option value="Accept-Language">Accept-Language</option>
+                        <option value="Cache-Control">Cache-Control</option>
+                    </select>
+                    <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除请求头">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <input type="text" class="param-description" placeholder="请求头描述">
+                <input type="text" class="default-header-description" placeholder="请求头说明（如：指定请求内容类型）">
             </div>
         `;
         container.insertAdjacentHTML('beforeend', headerHtml);
+        
+        // 绑定预设选择事件
+        const lastItem = container.lastElementChild;
+        const presetSelect = lastItem.querySelector('.default-header-preset');
+        const nameInput = lastItem.querySelector('.default-header-name');
+        const valueInput = lastItem.querySelector('.default-header-value');
+        
+        presetSelect.addEventListener('change', (e) => {
+            const preset = e.target.value;
+            if (preset) {
+                nameInput.value = preset;
+                // 设置常用的默认值
+                switch (preset) {
+                    case 'Content-Type':
+                        valueInput.value = 'application/json';
+                        break;
+                    case 'Accept':
+                        valueInput.value = 'application/json';
+                        break;
+                    case 'User-Agent':
+                        valueInput.value = 'MCP-Adapter/1.0';
+                        break;
+                    case 'Accept-Language':
+                        valueInput.value = 'zh-CN,zh;q=0.9,en;q=0.8';
+                        break;
+                    case 'Cache-Control':
+                        valueInput.value = 'no-cache';
+                        break;
+                }
+            }
+        });
     }
 
     // 清空参数
@@ -1205,19 +1311,21 @@ class MCPAdapterApp {
         document.getElementById('default-headers-list').innerHTML = '';
     }
 
-    // 加载参数到表单
+    // 加载请求参数到表单
     loadParametersToForm(parameters) {
         const container = document.getElementById('parameters-list');
         container.innerHTML = '';
         
-        parameters.forEach(param => {
-            this.addParameter();
-            const item = container.lastElementChild;
-            item.querySelector('.param-name').value = param.name;
-            item.querySelector('.param-type').value = param.type;
-            item.querySelector('.param-required').checked = param.required;
-            item.querySelector('.param-description').value = param.description || '';
-        });
+        if (parameters && parameters.length > 0) {
+            parameters.forEach(param => {
+                this.addParameter();
+                const item = container.lastElementChild;
+                item.querySelector('.request-param-name').value = param.name || '';
+                item.querySelector('.request-param-type').value = param.type || 'string';
+                item.querySelector('.request-param-required').checked = param.required || false;
+                item.querySelector('.request-param-description').value = param.description || '';
+            });
+        }
     }
 
     // 加载默认参数到表单
@@ -1225,13 +1333,16 @@ class MCPAdapterApp {
         const container = document.getElementById('default-params-list');
         container.innerHTML = '';
         
-        params.forEach(param => {
-            this.addDefaultParameter();
-            const item = container.lastElementChild;
-            item.querySelector('.param-name').value = param.name;
-            item.querySelector('.param-value').value = param.value;
-            item.querySelector('.param-description').value = param.description || '';
-        });
+        if (params && params.length > 0) {
+            params.forEach(param => {
+                this.addDefaultParameter();
+                const item = container.lastElementChild;
+                item.querySelector('.default-param-name').value = param.name || '';
+                item.querySelector('.default-param-value').value = param.value || '';
+                item.querySelector('.default-param-location').value = param.location || 'query';
+                item.querySelector('.default-param-description').value = param.description || '';
+            });
+        }
     }
 
     // 加载默认请求头到表单
@@ -1239,13 +1350,15 @@ class MCPAdapterApp {
         const container = document.getElementById('default-headers-list');
         container.innerHTML = '';
         
-        headers.forEach(header => {
-            this.addDefaultHeader();
-            const item = container.lastElementChild;
-            item.querySelector('.param-name').value = header.name;
-            item.querySelector('.param-value').value = header.value;
-            item.querySelector('.param-description').value = header.description || '';
-        });
+        if (headers && headers.length > 0) {
+            headers.forEach(header => {
+                this.addDefaultHeader();
+                const item = container.lastElementChild;
+                item.querySelector('.default-header-name').value = header.name || '';
+                item.querySelector('.default-header-value').value = header.value || '';
+                item.querySelector('.default-header-description').value = header.description || '';
+            });
+        }
     }
 
     // 切换参数标签页

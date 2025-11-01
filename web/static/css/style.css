@@ -661,14 +661,49 @@ input:checked + .slider:before {
     background: #f8fafc;
     border-radius: 0.5rem;
     border: 1px solid #e2e8f0;
+    transition: all 0.2s ease;
+}
+
+.parameter-item:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* 请求参数样式 */
+.request-param-item {
+    border-left: 3px solid #3b82f6;
+}
+
+/* 默认参数样式 */
+.default-param-item {
+    border-left: 3px solid #10b981;
+}
+
+/* 默认请求头样式 */
+.default-header-item {
+    border-left: 3px solid #f59e0b;
 }
 
 .parameter-row {
     display: grid;
-    grid-template-columns: 1fr 1fr auto auto;
     gap: 0.75rem;
     align-items: center;
     margin-bottom: 0.5rem;
+}
+
+/* 请求参数行布局 */
+.request-param-item .parameter-row {
+    grid-template-columns: 1fr 120px auto auto;
+}
+
+/* 默认参数行布局 */
+.default-param-item .parameter-row {
+    grid-template-columns: 1fr 1fr 100px auto;
+}
+
+/* 默认请求头行布局 */
+.default-header-item .parameter-row {
+    grid-template-columns: 1fr 1fr 120px auto;
 }
 
 .parameter-row input,
@@ -715,8 +750,31 @@ input:checked + .slider:before {
     background: #dc2626;
 }
 
+/* 参数配置帮助提示 */
+.parameter-help {
+    background: #f0f9ff;
+    border: 1px solid #0ea5e9;
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    color: #0c4a6e;
+}
+
+.parameter-help ul {
+    margin: 0.5rem 0 0 1rem;
+    padding: 0;
+}
+
+.parameter-help li {
+    margin-bottom: 0.25rem;
+}
+
 @media (max-width: 768px) {
-    .parameter-row {
+    .parameter-row,
+    .request-param-item .parameter-row,
+    .default-param-item .parameter-row,
+    .default-header-item .parameter-row {
         grid-template-columns: 1fr;
         gap: 0.5rem;
     }
