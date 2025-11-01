@@ -41,6 +41,10 @@ func SetupRoutes() *mux.Router {
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./web/static/index.html")
 	})
+
+	// MCP-SSE服务
+	r.HandleFunc("/sse/{path}", handlers.ServeSSE)
+
 	return r
 }
 

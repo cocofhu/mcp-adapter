@@ -82,8 +82,8 @@ go run ./backend/main.go
 **方式三：编译后运行**
 ```bash
 set CGO_ENABLED=0
-go build -o mcp-adapter.exe ./backend
-./mcp-adapter.exe
+go build -o adapter-adapter.exe ./backend
+./adapter-adapter.exe
 ```
 
 ### 3. 访问应用
