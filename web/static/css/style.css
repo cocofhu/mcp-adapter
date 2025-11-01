@@ -554,9 +554,17 @@ input:checked + .slider:before {
 }
 
 .form-group input:invalid:focus,
-.form-group select:invalid:focus {
+.form-group select:invalid:focus,
+.form-group input.error:focus,
+.form-group select.error:focus {
     border-color: #ef4444;
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.form-group input.error,
+.form-group select.error {
+    border-color: #ef4444;
+    background-color: #fef2f2;
 }
 
 .form-group label.required::after {

@@ -9,6 +9,11 @@ class MCPAdapterApp {
         this.currentTab = 'applications';
         this.currentAppId = null;
         this.editingInterfaceId = null;
+        
+        // 防重复提交状态管理
+        this.requestLocks = new Map(); // 请求锁定状态
+        this.buttonStates = new Map(); // 按钮状态管理
+        
         this.init();
     }
 
@@ -26,13 +31,25 @@ class MCPAdapterApp {
         }
     }
 
-    // API 调用方法
-    async apiCall(endpoint, method = 'GET', data = null) {
+    // 网络状态检测
+    checkNetworkStatus() {
+        if (!navigator.onLine) {
+            throw new Error('网络连接已断开，请检查网络设置');
+        }
+    }
+
+    // API 调用方法（增强版）
+    async apiCall(endpoint, method = 'GET', data = null, options = {}) {
+        // 检查网络状态
+        this.checkNetworkStatus();
+
         const config = {
             method,
             headers: {
                 'Content-Type': 'application/json',
             },
+            // 添加超时控制
+            signal: options.timeout ? AbortSignal.timeout(options.timeout) : undefined,
         };
 
         if (data) {
@@ -43,7 +60,32 @@ class MCPAdapterApp {
             const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
             
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                // 根据状态码提供更友好的错误信息
+                let errorMessage = `请求失败 (${response.status})`;
+                switch (response.status) {
+                    case 400:
+                        errorMessage = '请求参数错误';
+                        break;
+                    case 401:
+                        errorMessage = '未授权访问';
+                        break;
+                    case 403:
+                        errorMessage = '访问被拒绝';
+                        break;
+                    case 404:
+                        errorMessage = '请求的资源不存在';
+                        break;
+                    case 409:
+                        errorMessage = '资源冲突，可能已存在相同名称的项目';
+                        break;
+                    case 500:
+                        errorMessage = '服务器内部错误';
+                        break;
+                    case 503:
+                        errorMessage = '服务暂时不可用';
+                        break;
+                }
+                throw new Error(errorMessage);
             }
 
             // 如果是 DELETE 请求且返回 204，直接返回 true
@@ -54,7 +96,16 @@ class MCPAdapterApp {
             return await response.json();
         } catch (error) {
             console.error('API call failed:', error);
-            this.showNotification('操作失败: ' + error.message, 'error');
+            
+            // 处理不同类型的错误
+            let userMessage = error.message;
+            if (error.name === 'AbortError') {
+                userMessage = '请求超时，请稍后重试';
+            } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                userMessage = '网络连接失败，请检查网络设置';
+            }
+            
+            this.showNotification('操作失败: ' + userMessage, 'error');
             throw error;
         }
     }
@@ -216,6 +267,109 @@ class MCPAdapterApp {
         }
     }
 
+    // 按钮状态管理
+    setButtonLoading(buttonId, loading = true) {
+        const button = document.getElementById(buttonId);
+        if (!button) return;
+
+        if (loading) {
+            // 保存原始状态
+            this.buttonStates.set(buttonId, {
+                disabled: button.disabled,
+                innerHTML: button.innerHTML,
+                className: button.className
+            });
+            
+            // 设置加载状态
+            button.disabled = true;
+            button.classList.add('loading');
+            button.innerHTML = button.innerHTML.replace(/^.*?(<i[^>]*><\/i>)?\s*/, '$1 处理中...');
+        } else {
+            // 恢复原始状态
+            const originalState = this.buttonStates.get(buttonId);
+            if (originalState) {
+                button.disabled = originalState.disabled;
+                button.innerHTML = originalState.innerHTML;
+                button.className = originalState.className;
+                this.buttonStates.delete(buttonId);
+            }
+        }
+    }
+
+    // 请求锁定机制
+    async executeWithLock(lockKey, asyncFunction) {
+        // 检查是否已有相同请求在进行
+        if (this.requestLocks.get(lockKey)) {
+            console.warn(`Request ${lockKey} is already in progress`);
+            return null;
+        }
+
+        try {
+            // 设置锁定状态
+            this.requestLocks.set(lockKey, true);
+            
+            // 执行异步操作
+            const result = await asyncFunction();
+            return result;
+        } catch (error) {
+            throw error;
+        } finally {
+            // 释放锁定
+            this.requestLocks.delete(lockKey);
+        }
+    }
+
+    // 表单验证增强
+    validateForm(formId, rules = {}) {
+        const form = document.getElementById(formId);
+        if (!form) return false;
+
+        let isValid = true;
+        const errors = [];
+
+        // 清除之前的错误提示
+        form.querySelectorAll('.form-error').forEach(error => error.remove());
+
+        // 验证必填字段
+        form.querySelectorAll('[required]').forEach(field => {
+            if (!field.value.trim()) {
+                isValid = false;
+                this.showFieldError(field, '此字段为必填项');
+                errors.push(`${field.name || field.id}: 必填项不能为空`);
+            }
+        });
+
+        // 自定义验证规则
+        Object.entries(rules).forEach(([fieldId, rule]) => {
+            const field = document.getElementById(fieldId);
+            if (field && rule.validator && !rule.validator(field.value)) {
+                isValid = false;
+                this.showFieldError(field, rule.message);
+                errors.push(`${fieldId}: ${rule.message}`);
+            }
+        });
+
+        return { isValid, errors };
+    }
+
+    // 显示字段错误
+    showFieldError(field, message) {
+        const errorElement = document.createElement('div');
+        errorElement.className = 'form-error';
+        errorElement.textContent = message;
+        field.parentNode.appendChild(errorElement);
+        
+        // 添加错误样式
+        field.classList.add('error');
+        
+        // 自动清除错误状态
+        field.addEventListener('input', () => {
+            field.classList.remove('error');
+            const error = field.parentNode.querySelector('.form-error');
+            if (error) error.remove();
+        }, { once: true });
+    }
+
     // 显示通知
     showNotification(message, type = 'info') {
         // 创建通知元素
@@ -293,6 +447,25 @@ class MCPAdapterApp {
                     this.hideCreateAppModal();
                 }
             }
+        });
+
+        // 页面卸载时清理资源
+        window.addEventListener('beforeunload', (e) => {
+            // 检查是否有正在进行的请求
+            if (this.requestLocks.size > 0) {
+                e.preventDefault();
+                e.returnValue = '有操作正在进行中，确定要离开页面吗？';
+                return e.returnValue;
+            }
+        });
+
+        // 网络状态监听
+        window.addEventListener('online', () => {
+            this.showNotification('网络连接已恢复', 'success');
+        });
+
+        window.addEventListener('offline', () => {
+            this.showNotification('网络连接已断开', 'error');
         });
 
         // 接口表单提交
@@ -602,26 +775,52 @@ class MCPAdapterApp {
 
     // 处理创建应用
     async handleCreateApp() {
-        const form = document.getElementById('create-app-form');
-        const formData = new FormData(form);
-        
+        const buttonId = 'create-app-confirm-btn';
+        const lockKey = 'create-application';
+
+        // 表单验证
+        const validation = this.validateForm('create-app-form', {
+            'app-name': {
+                validator: (value) => value.trim().length >= 2,
+                message: '应用名称至少需要2个字符'
+            }
+        });
+
+        if (!validation.isValid) {
+            this.showNotification('请检查表单输入', 'error');
+            return;
+        }
+
+        // 收集表单数据
         const appData = {
-            name: document.getElementById('app-name').value,
-            description: document.getElementById('app-description').value,
-            path: document.getElementById('app-version').value,
+            name: document.getElementById('app-name').value.trim(),
+            description: document.getElementById('app-description').value.trim(),
+            path: document.getElementById('app-version').value.trim(),
             protocol: 'http',
             enabled: true
         };
 
-        if (!appData.name) {
-            this.showNotification('请输入应用名称', 'error');
-            return;
-        }
-
+        // 使用锁定机制防止重复提交
         try {
-            await this.createApplication(appData);
-            this.hideCreateAppModal();
+            const result = await this.executeWithLock(lockKey, async () => {
+                // 设置按钮加载状态
+                this.setButtonLoading(buttonId, true);
+                
+                try {
+                    const newApp = await this.createApplication(appData);
+                    this.hideCreateAppModal();
+                    return newApp;
+                } finally {
+                    // 确保按钮状态被重置
+                    this.setButtonLoading(buttonId, false);
+                }
+            });
+
+            if (result === null) {
+                this.showNotification('请勿重复提交', 'info');
+            }
         } catch (error) {
+            this.setButtonLoading(buttonId, false);
             // 错误已在 createApplication 中处理
         }
     }
@@ -648,23 +847,52 @@ class MCPAdapterApp {
 
     // 处理更新应用
     async handleUpdateApp(id) {
+        const buttonId = 'create-app-confirm-btn';
+        const lockKey = `update-application-${id}`;
+
+        // 表单验证
+        const validation = this.validateForm('create-app-form', {
+            'app-name': {
+                validator: (value) => value.trim().length >= 2,
+                message: '应用名称至少需要2个字符'
+            }
+        });
+
+        if (!validation.isValid) {
+            this.showNotification('请检查表单输入', 'error');
+            return;
+        }
+
+        // 收集表单数据
         const appData = {
-            name: document.getElementById('app-name').value,
-            description: document.getElementById('app-description').value,
-            path: document.getElementById('app-version').value,
+            name: document.getElementById('app-name').value.trim(),
+            description: document.getElementById('app-description').value.trim(),
+            path: document.getElementById('app-version').value.trim(),
             protocol: 'http',
             enabled: true
         };
 
-        if (!appData.name) {
-            this.showNotification('请输入应用名称', 'error');
-            return;
-        }
-
+        // 使用锁定机制防止重复提交
         try {
-            await this.updateApplication(id, appData);
-            this.hideCreateAppModal();
+            const result = await this.executeWithLock(lockKey, async () => {
+                // 设置按钮加载状态
+                this.setButtonLoading(buttonId, true);
+                
+                try {
+                    const updatedApp = await this.updateApplication(id, appData);
+                    this.hideCreateAppModal();
+                    return updatedApp;
+                } finally {
+                    // 确保按钮状态被重置
+                    this.setButtonLoading(buttonId, false);
+                }
+            });
+
+            if (result === null) {
+                this.showNotification('请勿重复提交', 'info');
+            }
         } catch (error) {
+            this.setButtonLoading(buttonId, false);
             // 错误已在 updateApplication 中处理
         }
     }
@@ -675,43 +903,97 @@ class MCPAdapterApp {
         const confirmBtn = document.getElementById('create-app-confirm-btn');
         confirmBtn.textContent = '创建应用';
         confirmBtn.onclick = () => this.handleCreateApp();
-        // 清空表单
-        document.getElementById('create-app-form').reset();
+        
+        // 清空表单和错误状态
+        const form = document.getElementById('create-app-form');
+        form.reset();
+        
+        // 清除所有错误提示和样式
+        form.querySelectorAll('.form-error').forEach(error => error.remove());
+        form.querySelectorAll('.error').forEach(field => field.classList.remove('error'));
+        
+        // 重置按钮状态
+        this.setButtonLoading('create-app-confirm-btn', false);
+        
+        // 清除相关的请求锁
+        this.requestLocks.delete('create-application');
+        Array.from(this.requestLocks.keys())
+            .filter(key => key.startsWith('update-application-'))
+            .forEach(key => this.requestLocks.delete(key));
     }
 
     // 删除应用确认
-    deleteApplicationConfirm(id) {
+    async deleteApplicationConfirm(id) {
         const app = this.applications.find(a => a.id === id);
         if (!app) return;
 
+        const lockKey = `delete-application-${id}`;
+        
+        // 检查是否已有删除操作在进行
+        if (this.requestLocks.get(lockKey)) {
+            this.showNotification('删除操作正在进行中', 'info');
+            return;
+        }
+
         if (confirm(`确定要删除应用"${app.name}"吗？这将同时删除该应用下的所有接口。`)) {
-            this.deleteApplication(id);
+            try {
+                await this.executeWithLock(lockKey, async () => {
+                    return await this.deleteApplication(id);
+                });
+            } catch (error) {
+                // 错误已在 deleteApplication 中处理
+            }
         }
     }
 
     // 处理保存接口
     async handleSaveInterface() {
+        const buttonId = 'save-interface-btn';
+        const isEditing = !!this.editingInterfaceId;
+        const lockKey = isEditing ? `update-interface-${this.editingInterfaceId}` : 'create-interface';
+
+        // 收集表单数据
         const interfaceData = this.collectInterfaceFormData();
         
+        // 验证表单数据
         if (!this.validateInterfaceData(interfaceData)) {
             return;
         }
 
+        // 使用锁定机制防止重复提交
         try {
-            if (this.editingInterfaceId) {
-                await this.updateInterface(this.editingInterfaceId, interfaceData);
-                this.editingInterfaceId = null;
-            } else {
-                await this.createInterface(interfaceData);
+            const result = await this.executeWithLock(lockKey, async () => {
+                // 设置按钮加载状态
+                this.setButtonLoading(buttonId, true);
+                
+                try {
+                    let savedInterface;
+                    if (isEditing) {
+                        savedInterface = await this.updateInterface(this.editingInterfaceId, interfaceData);
+                        this.editingInterfaceId = null;
+                    } else {
+                        savedInterface = await this.createInterface(interfaceData);
+                    }
+                    
+                    // 清空表单
+                    document.getElementById('add-interface-form').reset();
+                    this.clearParameters();
+                    
+                    // 切换到接口列表
+                    this.switchTab('interfaces');
+                    
+                    return savedInterface;
+                } finally {
+                    // 确保按钮状态被重置
+                    this.setButtonLoading(buttonId, false);
+                }
+            });
+
+            if (result === null) {
+                this.showNotification('请勿重复提交', 'info');
             }
-            
-            // 清空表单
-            document.getElementById('add-interface-form').reset();
-            this.clearParameters();
-            
-            // 切换到接口列表
-            this.switchTab('interfaces');
         } catch (error) {
+            this.setButtonLoading(buttonId, false);
             // 错误已在相应方法中处理
         }
     }
@@ -785,12 +1067,26 @@ class MCPAdapterApp {
     }
 
     // 删除接口确认
-    deleteInterfaceConfirm(id) {
+    async deleteInterfaceConfirm(id) {
         const iface = this.interfaces.find(i => i.id === id);
         if (!iface) return;
 
+        const lockKey = `delete-interface-${id}`;
+        
+        // 检查是否已有删除操作在进行
+        if (this.requestLocks.get(lockKey)) {
+            this.showNotification('删除操作正在进行中', 'info');
+            return;
+        }
+
         if (confirm(`确定要删除接口"${iface.name}"吗？`)) {
-            this.deleteInterface(id);
+            try {
+                await this.executeWithLock(lockKey, async () => {
+                    return await this.deleteInterface(id);
+                });
+            } catch (error) {
+                // 错误已在 deleteInterface 中处理
+            }
         }
     }
 
