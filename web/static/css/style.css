@@ -99,6 +99,34 @@ body {
     font-size: 1rem;
 }
 
+/* 快速添加按钮样式 */
+#quick-add-btn {
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+#quick-add-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+#quick-add-btn:active {
+    transform: translateY(0);
+}
+
+/* 快速添加按钮在不同页面的样式 */
+#quick-add-btn.save-mode {
+    background-color: #10b981;
+    border-color: #10b981;
+}
+
+#quick-add-btn.save-mode:hover {
+    background-color: #059669;
+    border-color: #059669;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
 /* 按钮样式 */
 .btn {
     display: inline-flex;
@@ -986,6 +1014,12 @@ input:checked + .slider:before {
         flex-direction: column;
         gap: 1rem;
         align-items: stretch;
+    }
+    
+    /* 移动端快速添加按钮 */
+    #quick-add-btn {
+        width: 100%;
+        justify-content: center;
     }
     
     .tab-content {

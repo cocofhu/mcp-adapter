@@ -24,6 +24,9 @@ class MCPAdapterApp {
         this.renderApplications();
         this.updateAppSelectors();
         
+        // 初始化快速添加按钮
+        this.updateQuickAddButton(this.currentTab);
+        
         // 初始化参数信息显示和UI状态
         const protocolType = document.getElementById('protocol-type');
         if (protocolType && protocolType.value) {
@@ -413,6 +416,12 @@ class MCPAdapterApp {
             createAppBtn.addEventListener('click', () => this.showCreateAppModal());
         }
 
+        // 快速添加按钮
+        const quickAddBtn = document.getElementById('quick-add-btn');
+        if (quickAddBtn) {
+            quickAddBtn.addEventListener('click', () => this.handleQuickAdd());
+        }
+
         // 创建应用模态框事件
         const createAppConfirmBtn = document.getElementById('create-app-confirm-btn');
         if (createAppConfirmBtn) {
@@ -532,6 +541,71 @@ class MCPAdapterApp {
         }
     }
 
+    // 处理快速添加
+    async handleQuickAdd() {
+        const quickAddBtn = document.getElementById('quick-add-btn');
+        
+        // 防止重复点击
+        if (quickAddBtn && quickAddBtn.disabled) {
+            return;
+        }
+
+        // 根据当前标签页决定快速添加的行为
+        switch (this.currentTab) {
+            case 'applications':
+                // 在应用管理页面，快速添加应用
+                this.showCreateAppModal();
+                break;
+            case 'interfaces':
+                // 在接口列表页面，快速添加接口
+                this.switchTab('add-interface');
+                break;
+            case 'add-interface':
+                // 在添加接口页面，执行保存操作
+                await this.handleSaveInterface();
+                break;
+            default:
+                // 默认跳转到添加接口页面
+                this.switchTab('add-interface');
+                break;
+        }
+    }
+
+    // 更新快速添加按钮
+    updateQuickAddButton(tabName) {
+        const quickAddBtn = document.getElementById('quick-add-btn');
+        if (!quickAddBtn) return;
+
+        // 清除所有特殊样式类
+        quickAddBtn.classList.remove('save-mode');
+
+        const buttonConfigs = {
+            'applications': {
+                text: '<i class="fas fa-plus"></i> 创建应用',
+                title: '快速创建新应用',
+                className: ''
+            },
+            'interfaces': {
+                text: '<i class="fas fa-plus"></i> 添加接口',
+                title: '快速添加新接口',
+                className: ''
+            },
+            'add-interface': {
+                text: '<i class="fas fa-save"></i> 保存接口',
+                title: '保存当前接口配置',
+                className: 'save-mode'
+            }
+        };
+
+        const config = buttonConfigs[tabName] || buttonConfigs['interfaces'];
+        quickAddBtn.innerHTML = config.text;
+        quickAddBtn.title = config.title;
+        
+        if (config.className) {
+            quickAddBtn.classList.add(config.className);
+        }
+    }
+
     // 切换标签页
     switchTab(tabName) {
         // 更新导航状态
@@ -553,6 +627,9 @@ class MCPAdapterApp {
             'add-interface': '添加接口'
         };
         document.getElementById('page-title').textContent = titles[tabName];
+
+        // 更新快速添加按钮
+        this.updateQuickAddButton(tabName);
 
         this.currentTab = tabName;
 
@@ -1101,8 +1178,15 @@ class MCPAdapterApp {
         // 切换到添加接口页面
         this.switchTab('add-interface');
         
-        // 更新页面标题
+        // 更新页面标题和快速添加按钮
         document.getElementById('page-title').textContent = '编辑接口';
+        const quickAddBtn = document.getElementById('quick-add-btn');
+        if (quickAddBtn) {
+            quickAddBtn.classList.remove('save-mode');
+            quickAddBtn.classList.add('save-mode');
+            quickAddBtn.innerHTML = '<i class="fas fa-save"></i> 更新接口';
+            quickAddBtn.title = '保存接口修改';
+        }
     }
 
     // 删除接口确认
