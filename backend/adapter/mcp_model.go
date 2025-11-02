@@ -2,11 +2,13 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"net/http"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -56,10 +58,6 @@ func InitServer() {
 			return
 		}
 		mcpServer := server.NewMCPServer(app.Name, "1.0.0")
-		mcpServer.AddTool(mcp.NewTool("echo"), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return mcp.NewToolResultText(fmt.Sprintf("Echo: %v", req.GetArguments()["message"])), nil
-		})
-
 		sseServer[app.Path] = &Server{
 			protocol: app.Protocol,
 			path:     app.Path,
@@ -67,10 +65,13 @@ func InitServer() {
 			impl: server.NewSSEServer(
 				mcpServer,
 				server.WithSSEEndpoint(fmt.Sprintf("/sse/%s", app.Path)),
+				server.WithMessageEndpoint(fmt.Sprintf("/message/%s", app.Path)),
 			),
 		}
+		for _, iface := range interfaces {
+			go addTool(&iface, &app)
+		}
 		log.Printf("Added SSE server: %s, path : %s", app.Name, fmt.Sprintf("/sse/%s", app.Path))
-
 	}
 
 	go func() {
@@ -90,13 +91,56 @@ func GetServerImpl(path string) http.Handler {
 	return nil
 }
 
+type ToolParameter struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Required    bool   `json:"required"`
+	Location    string `json:"location"`
+	Description string `json:"description"`
+}
+type ToolOptions struct {
+	Parameters        []ToolParameter `json:"parameters"`
+	DefaultParameters []ToolParameter `json:"defaultParams"`
+	DefaultHeaders    []ToolParameter `json:"defaultHeaders"`
+}
+
 func addTool(iface *models.Interface, app *models.Application) {
+	time.Sleep(20 * time.Second)
 	if s, ok := sseServer[app.Path]; ok {
 		tool := s.server.GetTool(iface.Name)
 		if tool != nil {
 			log.Printf("tool %s in %s already exists, skipped!", iface.Name, app.Name)
 			return
 		}
-
+		var spec ToolOptions
+		err := json.Unmarshal([]byte(iface.Options), &spec)
+		if err != nil {
+			log.Fatalf("Error unmarshalling options: %v", err)
+			return
+		}
+		options := make([]mcp.ToolOption, 0)
+		options = append(options, mcp.WithDescription(iface.Description))
+		for _, p := range spec.Parameters {
+			pos := make([]mcp.PropertyOption, 0)
+			pos = append(pos, mcp.Description(p.Description))
+			if p.Required {
+				pos = append(pos, mcp.Required())
+			}
+			if p.Type == "string" {
+				options = append(options, mcp.WithString(p.Name, pos...))
+			} else if p.Type == "int64" {
+				options = append(options, mcp.WithNumber(p.Name, pos...))
+			} else if p.Type == "bool" {
+				options = append(options, mcp.WithBoolean(p.Name, pos...))
+			} else {
+				log.Printf("Unknown option type: %s, using string as default", p.Type)
+				options = append(options, mcp.WithString(p.Name, pos...))
+			}
+		}
+		newTool := mcp.NewTool(iface.Name, options...)
+		s.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return mcp.NewToolResultText("Call Tool Success!"), nil
+		})
+		log.Printf("Added tool: %s", iface.Name)
 	}
 }

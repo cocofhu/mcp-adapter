@@ -44,6 +44,7 @@ func SetupRoutes() *mux.Router {
 
 	// MCP-SSE服务
 	r.HandleFunc("/sse/{path}", handlers.ServeSSE)
+	r.HandleFunc("/message/{path}", handlers.ServeSSE)
 
 	return r
 }
