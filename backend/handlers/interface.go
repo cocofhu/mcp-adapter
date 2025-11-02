@@ -27,7 +27,13 @@ func CreateInterface(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 判断接口名字是否重复
+	// 判断接口名字是否重复（同一应用下唯一）
+	var count int64
+	db.Model(&models.Interface{}).Where("app_id = ? AND name = ?", iface.AppID, iface.Name).Count(&count)
+	if count > 0 {
+		http.Error(w, "Interface name already exists", http.StatusBadRequest)
+		return
+	}
 
 	if err := db.Create(&iface).Error; err != nil {
 		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
@@ -114,6 +120,23 @@ func UpdateInterface(w http.ResponseWriter, r *http.Request) {
 
 	// 保持原有ID
 	updateData.ID = iface.ID
+
+	// 如果更新了名称或AppID，校验同一应用下名称唯一
+	newAppID := updateData.AppID
+	if newAppID == 0 {
+		newAppID = iface.AppID
+	}
+	newName := updateData.Name
+	if newName == "" {
+		newName = iface.Name
+	}
+	var cnt int64
+	db.Model(&models.Interface{}).Where("app_id = ? AND name = ? AND id <> ?", newAppID, newName, iface.ID).Count(&cnt)
+	if cnt > 0 {
+		http.Error(w, "Interface name already exists", http.StatusBadRequest)
+		return
+	}
+
 	if err := db.Save(&updateData).Error; err != nil {
 		http.Error(w, "Failed to update interface", http.StatusInternalServerError)
 		return

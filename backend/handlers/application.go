@@ -19,6 +19,14 @@ func CreateApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db := database.GetDB()
+	// 判断应用名字是否重复（全局唯一）
+	var count int64
+	db.Model(&models.Application{}).Where("name = ?", app.Name).Count(&count)
+	if count > 0 {
+		http.Error(w, "Application name already exists", http.StatusBadRequest)
+		return
+	}
+
 	if err := db.Create(&app).Error; err != nil {
 		http.Error(w, "Failed to create application", http.StatusInternalServerError)
 		return
@@ -88,6 +96,19 @@ func UpdateApplication(w http.ResponseWriter, r *http.Request) {
 
 	// 保持原有ID
 	updateData.ID = app.ID
+
+	// 如果更新了名称，校验是否重复（全局唯一）
+	newName := updateData.Name
+	if newName == "" {
+		newName = app.Name
+	}
+	var cnt int64
+	db.Model(&models.Application{}).Where("name = ? AND id <> ?", newName, app.ID).Count(&cnt)
+	if cnt > 0 {
+		http.Error(w, "Application name already exists", http.StatusBadRequest)
+		return
+	}
+
 	if err := db.Save(&updateData).Error; err != nil {
 		http.Error(w, "Failed to update application", http.StatusInternalServerError)
 		return
