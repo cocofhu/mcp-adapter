@@ -422,10 +422,10 @@ class MCPAdapterApp {
             quickAddBtn.addEventListener('click', () => this.handleQuickAdd());
         }
 
-        // 创建应用模态框事件
+        // 创建应用模态框事件（避免重复绑定，具体处理在模态框打开/重置时通过 onclick 设置）
         const createAppConfirmBtn = document.getElementById('create-app-confirm-btn');
         if (createAppConfirmBtn) {
-            createAppConfirmBtn.addEventListener('click', () => this.handleCreateApp());
+            // 事件在 showCreateAppModal/resetCreateAppModal/editApplication 中动态绑定到 onclick
         }
 
         const createAppCancelBtn = document.getElementById('create-app-cancel-btn');
