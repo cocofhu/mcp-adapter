@@ -1,8 +1,10 @@
 package routes
 
 import (
+	"log"
 	"mcp-adapter/backend/handlers"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -10,10 +12,10 @@ import (
 // SetupRoutes 设置路由
 func SetupRoutes() *mux.Router {
 	r := mux.NewRouter()
-
+	// 记录日志
+	r.Use(loggingMiddleware)
 	// 启用CORS
 	r.Use(corsMiddleware)
-
 	// API路由组
 	api := r.PathPrefix("/api").Subrouter()
 
@@ -55,12 +57,21 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
-
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+// 日志中间件
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		log.Printf("%s %s", r.Method, r.RequestURI)
+		next.ServeHTTP(w, r)
+		log.Printf("%s %s, Request processed in %v", r.Method, r.RequestURI, time.Since(start))
 	})
 }

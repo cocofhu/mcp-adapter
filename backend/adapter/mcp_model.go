@@ -8,7 +8,6 @@ import (
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"net/http"
-	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,8 +17,8 @@ var event chan Event
 var sseServer map[string]*Server
 
 const (
-	AddInterface int = iota
-	RemoveInterface
+	AddTool int = iota
+	RemoveTool
 	AddApplication
 	RemoveApplication
 )
@@ -77,8 +76,10 @@ func InitServer() {
 	go func() {
 		for {
 			evt := <-event
-			if evt.Code == AddInterface {
-
+			if evt.Code == AddTool {
+				addTool(evt.Interface, evt.App)
+			} else if evt.Code == RemoveTool {
+				removeTool(evt.Interface, evt.App)
 			}
 		}
 	}()
@@ -92,20 +93,21 @@ func GetServerImpl(path string) http.Handler {
 }
 
 type ToolParameter struct {
-	Name        string `json:"name"`
-	Type        string `json:"type"`
+	Name        string `json:"name" validate:"required"`
+	Type        string `json:"type" validate:"oneof=sse streamable"`
 	Required    bool   `json:"required"`
-	Location    string `json:"location"`
+	Location    string `json:"location" validate:"oneof=query header body"`
 	Description string `json:"description"`
 }
 type ToolOptions struct {
+	Method            string          `json:"method"`
 	Parameters        []ToolParameter `json:"parameters"`
 	DefaultParameters []ToolParameter `json:"defaultParams"`
 	DefaultHeaders    []ToolParameter `json:"defaultHeaders"`
 }
 
 func addTool(iface *models.Interface, app *models.Application) {
-	time.Sleep(20 * time.Second)
+
 	if s, ok := sseServer[app.Path]; ok {
 		tool := s.server.GetTool(iface.Name)
 		if tool != nil {
@@ -138,9 +140,26 @@ func addTool(iface *models.Interface, app *models.Application) {
 			}
 		}
 		newTool := mcp.NewTool(iface.Name, options...)
+
 		s.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return mcp.NewToolResultText("Call Tool Success!"), nil
+
+			args := req.GetArguments()
+
+			data, code, err := CallHTTPInterface(ctx, iface, args)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			if code != http.StatusOK {
+				log.Printf("Error calling tool %s, code: %d", iface.Name, code)
+			}
+			return mcp.NewToolResultText(string(data)), nil
 		})
 		log.Printf("Added tool: %s", iface.Name)
+	}
+}
+
+func removeTool(iface *models.Interface, app *models.Application) {
+	if s, ok := sseServer[app.Path]; ok {
+		s.server.DeleteTools(iface.Name)
 	}
 }

@@ -1,8 +1,11 @@
 package models
 
 import (
+	"encoding/json"
+	"errors"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 )
 
@@ -36,4 +39,35 @@ type Interface struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
+type ToolParameter struct {
+	Name        string `json:"name" validate:"required"`
+	Type        string `json:"type" validate:"oneof=sse streamable"`
+	Required    bool   `json:"required"`
+	Location    string `json:"location" validate:"oneof=query header body"`
+	Description string `json:"description"`
+}
+type ToolOptions struct {
+	Method            string          `json:"method" validate:"oneof=GET POST PUT PATCH DELETE PATCH"`
+	Parameters        []ToolParameter `json:"parameters"`
+	DefaultParameters []ToolParameter `json:"defaultParams"`
+	DefaultHeaders    []ToolParameter `json:"defaultHeaders"`
+}
+
+func (iface *Interface) GetToolOptions() (ToolOptions, error) {
+	var spec ToolOptions
+	err := json.Unmarshal([]byte(iface.Options), &spec)
+	if err != nil {
+		return spec, err
+	}
+	return spec, nil
+}
+
+func (to *ToolOptions) Validate() error {
+	if to == nil {
+		return errors.New("tool options is nil")
+	}
+	validate := validator.New()
+	return validate.Struct(to)
 }

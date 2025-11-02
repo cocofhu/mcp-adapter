@@ -27,6 +27,8 @@ func CreateInterface(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 判断接口名字是否重复
+
 	if err := db.Create(&iface).Error; err != nil {
 		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
 		return
