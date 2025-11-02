@@ -33,7 +33,10 @@ func CreateApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(app)
+	err := json.NewEncoder(w).Encode(app)
+	if err != nil {
+		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
+	}
 }
 
 // GetApplications 获取所有应用
@@ -47,7 +50,10 @@ func GetApplications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(apps)
+	err := json.NewEncoder(w).Encode(apps)
+	if err != nil {
+		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
+	}
 }
 
 // GetApplication 获取单个应用
@@ -68,7 +74,10 @@ func GetApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(app)
+	err = json.NewEncoder(w).Encode(app)
+	if err != nil {
+		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
+	}
 }
 
 // UpdateApplication 更新应用
@@ -115,7 +124,10 @@ func UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updateData)
+	err = json.NewEncoder(w).Encode(updateData)
+	if err != nil {
+		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
+	}
 }
 
 // DeleteApplication 删除应用

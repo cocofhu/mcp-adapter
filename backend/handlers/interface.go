@@ -35,13 +35,26 @@ func CreateInterface(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	options, err := iface.GetToolOptions()
+	if err != nil {
+		http.Error(w, "Failed to get options", http.StatusBadRequest)
+	}
+
+	err = options.Validate()
+	if err != nil {
+		http.Error(w, "Options validation failed", http.StatusBadRequest)
+	}
+
 	if err := db.Create(&iface).Error; err != nil {
 		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(iface)
+	err = json.NewEncoder(w).Encode(iface)
+	if err != nil {
+		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
+	}
 }
 
 // GetInterfaces 获取所有接口
@@ -62,7 +75,10 @@ func GetInterfaces(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(interfaces)
+	err := json.NewEncoder(w).Encode(interfaces)
+	if err != nil {
+		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
+	}
 }
 
 // GetInterface 获取单个接口
@@ -83,7 +99,10 @@ func GetInterface(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(iface)
+	err = json.NewEncoder(w).Encode(iface)
+	if err != nil {
+		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
+	}
 }
 
 // UpdateInterface 更新接口
@@ -118,6 +137,16 @@ func UpdateInterface(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	options, err := iface.GetToolOptions()
+	if err != nil {
+		http.Error(w, "Failed to get options", http.StatusBadRequest)
+	}
+
+	err = options.Validate()
+	if err != nil {
+		http.Error(w, "Options validation failed", http.StatusBadRequest)
+	}
+
 	// 保持原有ID
 	updateData.ID = iface.ID
 
@@ -143,7 +172,10 @@ func UpdateInterface(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updateData)
+	err = json.NewEncoder(w).Encode(updateData)
+	if err != nil {
+		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
+	}
 }
 
 // DeleteInterface 删除接口
