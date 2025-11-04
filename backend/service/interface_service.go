@@ -10,10 +10,10 @@ import (
 
 type CreateInterfaceRequest struct {
 	AppID       int64              `json:"app_id" validate:"required,gt=0"`
-	Name        string             `json:"name,omitempty" validate:"required,regexp=^[a-zA-Z0-9_]+$, max=255" `
+	Name        string             `json:"name,omitempty" validate:"required,max=255" `
 	Description string             `json:"description,omitempty" validate:"max=16384"`
 	Protocol    string             `json:"protocol,omitempty" validate:"required,oneof=http"`
-	URL         string             `json:"url" validate:"required, max=1024"`
+	URL         string             `json:"url" validate:"required,max=1024"`
 	AuthType    string             `json:"auth_type" validate:"required,oneof=none"`
 	Enabled     bool               `json:"enabled,omitempty"`
 	PostProcess string             `json:"post_process" validate:"max=1048576"`
@@ -29,10 +29,10 @@ type ListInterfacesRequest struct {
 }
 type UpdateInterfaceRequest struct {
 	ID          int64               `json:"id" validate:"required,gt=0"`
-	Name        *string             `json:"name,omitempty" validate:"required,regexp=^[a-zA-Z0-9_]+$, max=255" `
+	Name        *string             `json:"name,omitempty" validate:"required,max=255" `
 	Description *string             `json:"description,omitempty" validate:"max=16384"`
 	Protocol    *string             `json:"protocol,omitempty" validate:"required,oneof=http"`
-	URL         *string             `json:"url" validate:"required, max=1024"`
+	URL         *string             `json:"url" validate:"required,max=1024"`
 	AuthType    *string             `json:"auth_type" validate:"required,oneof=none"`
 	Enabled     *bool               `json:"enabled,omitempty"`
 	PostProcess *string             `json:"post_process" validate:"max=1048576"`
