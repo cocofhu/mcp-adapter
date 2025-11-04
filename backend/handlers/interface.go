@@ -15,21 +15,9 @@ func CreateInterface(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid JSON format")
 		return
 	}
-
 	resp, err := service.CreateInterface(req)
 	if err != nil {
-		switch err {
-		case service.ErrValidation:
-			c.String(http.StatusBadRequest, "Invalid parameters")
-		case service.ErrNotFound:
-			c.String(http.StatusBadRequest, "Application not found")
-		case service.ErrIfaceNameExists:
-			c.String(http.StatusBadRequest, "Interface name already exists")
-		case service.ErrInvalidOptions:
-			c.String(http.StatusBadRequest, "Options validation failed")
-		default:
-			c.String(http.StatusInternalServerError, "Failed to create interface")
-		}
+		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, resp.Interface)
@@ -40,17 +28,12 @@ func GetInterfaces(c *gin.Context) {
 	var req service.ListInterfacesRequest
 	if appIDStr := c.Query("app_id"); appIDStr != "" {
 		if id, err := strconv.ParseInt(appIDStr, 10, 64); err == nil {
-			req.AppID = &id
+			req.AppID = id
 		}
 	}
 	resp, err := service.ListInterfaces(req)
 	if err != nil {
-		switch err {
-		case service.ErrValidation:
-			c.String(http.StatusBadRequest, "Invalid parameters")
-		default:
-			c.String(http.StatusInternalServerError, "Failed to fetch interfaces")
-		}
+		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, resp.Interfaces)
@@ -66,14 +49,7 @@ func GetInterface(c *gin.Context) {
 
 	resp, err := service.GetInterface(service.GetInterfaceRequest{ID: id})
 	if err != nil {
-		switch err {
-		case service.ErrValidation:
-			c.String(http.StatusBadRequest, "Invalid interface ID")
-		case service.ErrNotFound:
-			c.String(http.StatusNotFound, "Interface not found")
-		default:
-			c.String(http.StatusInternalServerError, "Failed to fetch interface")
-		}
+		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, resp.Interface)
@@ -96,18 +72,7 @@ func UpdateInterface(c *gin.Context) {
 
 	resp, err := service.UpdateInterface(body)
 	if err != nil {
-		switch err {
-		case service.ErrValidation:
-			c.String(http.StatusBadRequest, "Invalid parameters")
-		case service.ErrNotFound:
-			c.String(http.StatusNotFound, "Interface or Application not found")
-		case service.ErrIfaceNameExists:
-			c.String(http.StatusBadRequest, "Interface name already exists")
-		case service.ErrInvalidOptions:
-			c.String(http.StatusBadRequest, "Options validation failed")
-		default:
-			c.String(http.StatusInternalServerError, "Failed to update interface")
-		}
+		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, resp.Interface)
@@ -120,17 +85,9 @@ func DeleteInterface(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid interface ID")
 		return
 	}
-
 	_, err = service.DeleteInterface(service.DeleteInterfaceRequest{ID: id})
 	if err != nil {
-		switch err {
-		case service.ErrValidation:
-			c.String(http.StatusBadRequest, "Invalid interface ID")
-		case service.ErrNotFound:
-			c.String(http.StatusNotFound, "Interface not found")
-		default:
-			c.String(http.StatusInternalServerError, "Failed to delete interface")
-		}
+		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
 	c.Status(http.StatusNoContent)

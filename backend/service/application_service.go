@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"time"
@@ -10,43 +11,37 @@ import (
 
 var validate = validator.New()
 
-// DTOs
-// Create
 type CreateApplicationRequest struct {
-	Name        string `json:"name" validate:"required, max=128"`
-	Description string `json:"description" validate:"max=1024"`
-	Path        string `json:"path" validate:"required,regexp=^[a-zA-Z0-9_]+$, max=128"`
-	Protocol    string `json:"protocol" validate:"required,oneof=sse streamable"`
-	PostProcess string `json:"post_process" validate:"max=1024"`
-	Environment string `json:"environment" validate:"max=1024"`
-	Enabled     *bool  `json:"enabled,omitempty"`
+	Name        string `json:"name" validate:"required, max=128"`                        // 应用名称 不允许重复
+	Description string `json:"description" validate:"max=16384"`                         // 应用描述
+	Path        string `json:"path" validate:"required,regexp=^[a-zA-Z0-9_]+$, max=128"` // 应用路由标识
+	Protocol    string `json:"protocol" validate:"required,oneof=sse"`                   // 应用暴露协议
+	PostProcess string `json:"post_process" validate:"max=1048576"`                      // 应用后处理脚本
+	Environment string `json:"environment" validate:"max=1048576"`                       // 应用环境变量
+	Enabled     *bool  `json:"enabled,omitempty"`                                        // 是否启用应用
 }
 
-// Read
 type GetApplicationRequest struct {
 	ID int64 `json:"id" validate:"required,gt=0"`
 }
 
 type ListApplicationsRequest struct{}
 
-// Update (partial)
 type UpdateApplicationRequest struct {
 	ID          int64   `json:"id" validate:"required,gt=0"`
 	Name        *string `json:"name,omitempty" validate:"max=128"`
-	Description *string `json:"description,omitempty" validate:"max=1024"`
+	Description *string `json:"description,omitempty" validate:"max=16384"`
 	Path        *string `json:"path,omitempty" validate:"required,regexp=^[a-zA-Z0-9_]+$, max=128"`
-	Protocol    *string `json:"protocol,omitempty" validate:"required,oneof=sse streamable"`
-	PostProcess *string `json:"post_process,omitempty" validate:"max=1024"`
-	Environment *string `json:"environment,omitempty" validate:"max=1024"`
+	Protocol    *string `json:"protocol,omitempty" validate:"required,oneof=http"`
+	PostProcess *string `json:"post_process,omitempty" validate:"max=1048576"`
+	Environment *string `json:"environment,omitempty" validate:"max=1048576"`
 	Enabled     *bool   `json:"enabled,omitempty"`
 }
 
-// Delete
 type DeleteApplicationRequest struct {
 	ID int64 `json:"id" validate:"required,gt=0"`
 }
 
-// Response DTOs
 type ApplicationDTO struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
@@ -86,10 +81,10 @@ func toApplicationDTO(m models.Application) ApplicationDTO {
 	}
 }
 
-// Services
+// CreateApplication 创建应用
 func CreateApplication(req CreateApplicationRequest) (ApplicationResponse, error) {
 	if err := validate.Struct(req); err != nil {
-		return ApplicationResponse{}, ErrValidation
+		return ApplicationResponse{}, err
 	}
 	db := database.GetDB()
 	app := models.Application{
@@ -106,7 +101,7 @@ func CreateApplication(req CreateApplicationRequest) (ApplicationResponse, error
 	var count int64
 	db.Model(&models.Application{}).Where("name = ?", app.Name).Count(&count)
 	if count > 0 {
-		return ApplicationResponse{}, ErrAppNameExists
+		return ApplicationResponse{}, errors.New("duplicate application name")
 	}
 	if err := db.Create(&app).Error; err != nil {
 		return ApplicationResponse{}, err
@@ -114,19 +109,24 @@ func CreateApplication(req CreateApplicationRequest) (ApplicationResponse, error
 	return ApplicationResponse{Application: toApplicationDTO(app)}, nil
 }
 
+// GetApplication 获取单个应用
 func GetApplication(req GetApplicationRequest) (ApplicationResponse, error) {
 	if err := validate.Struct(req); err != nil {
-		return ApplicationResponse{}, ErrValidation
+		return ApplicationResponse{}, err
 	}
 	db := database.GetDB()
 	var app models.Application
 	if err := db.First(&app, req.ID).Error; err != nil {
-		return ApplicationResponse{}, ErrNotFound
+		return ApplicationResponse{}, errors.New("no such application")
 	}
 	return ApplicationResponse{Application: toApplicationDTO(app)}, nil
 }
 
-func ListApplications(_ ListApplicationsRequest) (ApplicationsResponse, error) {
+// ListApplications 获取应用列表
+func ListApplications(req ListApplicationsRequest) (ApplicationsResponse, error) {
+	if err := validate.Struct(req); err != nil {
+		return ApplicationsResponse{}, err
+	}
 	db := database.GetDB()
 	var apps []models.Application
 	if err := db.Find(&apps).Error; err != nil {
@@ -140,13 +140,13 @@ func ListApplications(_ ListApplicationsRequest) (ApplicationsResponse, error) {
 }
 
 func UpdateApplication(req UpdateApplicationRequest) (ApplicationResponse, error) {
-	if err := validate.Var(req.ID, "required,gt=0"); err != nil {
-		return ApplicationResponse{}, ErrValidation
+	if err := validate.Struct(req); err != nil {
+		return ApplicationResponse{}, err
 	}
 	db := database.GetDB()
 	var existing models.Application
 	if err := db.First(&existing, req.ID).Error; err != nil {
-		return ApplicationResponse{}, ErrNotFound
+		return ApplicationResponse{}, errors.New("no such application")
 	}
 	// apply changes
 	if req.Name != nil {
@@ -175,7 +175,7 @@ func UpdateApplication(req UpdateApplicationRequest) (ApplicationResponse, error
 	var cnt int64
 	db.Model(&models.Application{}).Where("name = ? AND id <> ?", newName, existing.ID).Count(&cnt)
 	if cnt > 0 {
-		return ApplicationResponse{}, ErrAppNameExists
+		return ApplicationResponse{}, errors.New("duplicate application name")
 	}
 	if err := db.Save(&existing).Error; err != nil {
 		return ApplicationResponse{}, err
@@ -185,12 +185,18 @@ func UpdateApplication(req UpdateApplicationRequest) (ApplicationResponse, error
 
 func DeleteApplication(req DeleteApplicationRequest) (EmptyResponse, error) {
 	if err := validate.Struct(req); err != nil {
-		return EmptyResponse{}, ErrValidation
+		return EmptyResponse{}, err
 	}
 	db := database.GetDB()
 	var app models.Application
 	if err := db.First(&app, req.ID).Error; err != nil {
-		return EmptyResponse{}, ErrNotFound
+		return EmptyResponse{}, errors.New("no such application")
+	}
+	// 如果存在关联接口，拒绝删除
+	var count int64
+	db.Model(&models.Interface{}).Where("app_id = ?", app.ID).Count(&count)
+	if count > 0 {
+		return EmptyResponse{}, errors.New("cannot delete application with associated interfaces")
 	}
 	if err := db.Delete(&app).Error; err != nil {
 		return EmptyResponse{}, err

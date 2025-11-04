@@ -1,66 +1,61 @@
 package service
 
 import (
+	"encoding/json"
+	"errors"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"time"
 )
 
-// Create DTO
 type CreateInterfaceRequest struct {
-	AppID       int64  `json:"app_id" validate:"required,gt=0"`
-	Name        string `json:"name" validate:"required, max=128"`
-	Description string `json:"description" validate:"max=1024"`
-	Protocol    string `json:"protocol" validate:"required,oneof=sse streamable"`
-	URL         string `json:"url" validate:"required, max=1024"`
-	AuthType    string `json:"auth_type" validate:"required,oneof=none"`
-	Enabled     *bool  `json:"enabled,omitempty"`
-	PostProcess string `json:"post_process" validate:"max=1024"`
-	Options     string `json:"options" validate:"max=16384"`
+	AppID       int64              `json:"app_id" validate:"required,gt=0"`
+	Name        string             `json:"name,omitempty" validate:"required,regexp=^[a-zA-Z0-9_]+$, max=255" `
+	Description string             `json:"description,omitempty" validate:"max=16384"`
+	Protocol    string             `json:"protocol,omitempty" validate:"required,oneof=http"`
+	URL         string             `json:"url" validate:"required, max=1024"`
+	AuthType    string             `json:"auth_type" validate:"required,oneof=none"`
+	Enabled     bool               `json:"enabled,omitempty"`
+	PostProcess string             `json:"post_process" validate:"max=1048576"`
+	Options     models.ToolOptions `json:"options" validate:"required"`
 }
 
-// Read DTO
 type GetInterfaceRequest struct {
 	ID int64 `json:"id" validate:"required,gt=0"`
 }
 
 type ListInterfacesRequest struct {
-	AppID *int64 `json:"app_id,omitempty" validate:"omitempty,gt=0"`
+	AppID int64 `json:"app_id" validate:"required,gt=0"`
 }
-
-// Update DTO (partial)
 type UpdateInterfaceRequest struct {
-	ID          int64   `json:"id" validate:"required,gt=0"`
-	AppID       *int64  `json:"app_id,omitempty" validate:"omitempty,gt=0"`
-	Name        *string `json:"name,omitempty" validate:"max=128"`
-	Description *string `json:"description,omitempty" validate:"max=1024"`
-	Protocol    *string `json:"protocol,omitempty" validate:"required,oneof=sse streamable"`
-	URL         *string `json:"url,omitempty" validate:"max=1024"`
-	AuthType    *string `json:"auth_type,omitempty" validate:"required,oneof=none"`
-	Enabled     *bool   `json:"enabled,omitempty"`
-	PostProcess *string `json:"post_process,omitempty"`
-	Options     *string `json:"options,omitempty" validate:"max=16384"`
+	ID          int64               `json:"id" validate:"required,gt=0"`
+	Name        *string             `json:"name,omitempty" validate:"required,regexp=^[a-zA-Z0-9_]+$, max=255" `
+	Description *string             `json:"description,omitempty" validate:"max=16384"`
+	Protocol    *string             `json:"protocol,omitempty" validate:"required,oneof=http"`
+	URL         *string             `json:"url" validate:"required, max=1024"`
+	AuthType    *string             `json:"auth_type" validate:"required,oneof=none"`
+	Enabled     *bool               `json:"enabled,omitempty"`
+	PostProcess *string             `json:"post_process" validate:"max=1048576"`
+	Options     *models.ToolOptions `json:"options" validate:"required"`
 }
 
-// Delete
 type DeleteInterfaceRequest struct {
 	ID int64 `json:"id" validate:"required,gt=0"`
 }
 
-// Response DTOs
 type InterfaceDTO struct {
-	ID          int64     `json:"id"`
-	AppID       int64     `json:"app_id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Protocol    string    `json:"protocol"`
-	URL         string    `json:"url"`
-	AuthType    string    `json:"auth_type"`
-	Enabled     bool      `json:"enabled"`
-	PostProcess string    `json:"post_process"`
-	Options     string    `json:"options"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          int64              `json:"id"`
+	AppID       int64              `json:"app_id"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Protocol    string             `json:"protocol"`
+	URL         string             `json:"url"`
+	AuthType    string             `json:"auth_type"`
+	Enabled     bool               `json:"enabled"`
+	PostProcess string             `json:"post_process"`
+	Options     models.ToolOptions `json:"options"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
 }
 
 type InterfaceResponse struct {
@@ -71,8 +66,9 @@ type InterfacesResponse struct {
 	Interfaces []InterfaceDTO `json:"interfaces"`
 }
 
-// mapper
 func toInterfaceDTO(m models.Interface) InterfaceDTO {
+	// 此处不应该出错，上游需要保证options合法
+	options, _ := m.GetToolOptions()
 	return InterfaceDTO{
 		ID:          m.ID,
 		AppID:       m.AppID,
@@ -83,28 +79,35 @@ func toInterfaceDTO(m models.Interface) InterfaceDTO {
 		AuthType:    m.AuthType,
 		Enabled:     m.Enabled,
 		PostProcess: m.PostProcess,
-		Options:     m.Options,
+		Options:     options,
 		CreatedAt:   m.CreatedAt,
 		UpdatedAt:   m.UpdatedAt,
 	}
 }
 
-// Services
 func CreateInterface(req CreateInterfaceRequest) (InterfaceResponse, error) {
 	if err := validate.Struct(req); err != nil {
-		return InterfaceResponse{}, ErrValidation
+		return InterfaceResponse{}, err
 	}
 	db := database.GetDB()
-	// check app exists
+	// 检查应用是否存在
 	var app models.Application
 	if err := db.First(&app, req.AppID).Error; err != nil {
-		return InterfaceResponse{}, ErrNotFound
+		return InterfaceResponse{}, errors.New("no such application")
 	}
-	// unique name within app
+	// 接口名字在应用内唯一
 	var count int64
 	db.Model(&models.Interface{}).Where("app_id = ? AND name = ?", req.AppID, req.Name).Count(&count)
 	if count > 0 {
-		return InterfaceResponse{}, ErrIfaceNameExists
+		return InterfaceResponse{}, errors.New("interface name already exists in the application")
+	}
+	// 将option转换JSONString
+	opt, err := json.Marshal(req.Options)
+	if err != nil {
+		return InterfaceResponse{}, errors.New("interface options is invalid")
+	}
+	if len(opt) > 1048576 {
+		return InterfaceResponse{}, errors.New("interface options exceed max size")
 	}
 	iface := models.Interface{
 		AppID:       req.AppID,
@@ -114,16 +117,8 @@ func CreateInterface(req CreateInterfaceRequest) (InterfaceResponse, error) {
 		URL:         req.URL,
 		AuthType:    req.AuthType,
 		PostProcess: req.PostProcess,
-		Options:     req.Options,
-	}
-	if req.Enabled != nil {
-		iface.Enabled = *req.Enabled
-	}
-	// validate options
-	if opts, err := iface.GetToolOptions(); err != nil {
-		return InterfaceResponse{}, ErrInvalidOptions
-	} else if err = opts.Validate(); err != nil {
-		return InterfaceResponse{}, ErrInvalidOptions
+		Options:     string(opt),
+		Enabled:     req.Enabled,
 	}
 	if err := db.Create(&iface).Error; err != nil {
 		return InterfaceResponse{}, err
@@ -133,26 +128,28 @@ func CreateInterface(req CreateInterfaceRequest) (InterfaceResponse, error) {
 
 func GetInterface(req GetInterfaceRequest) (InterfaceResponse, error) {
 	if err := validate.Struct(req); err != nil {
-		return InterfaceResponse{}, ErrValidation
+		return InterfaceResponse{}, err
 	}
 	db := database.GetDB()
 	var iface models.Interface
 	if err := db.First(&iface, req.ID).Error; err != nil {
-		return InterfaceResponse{}, ErrNotFound
+		return InterfaceResponse{}, errors.New("no such interface")
 	}
 	return InterfaceResponse{Interface: toInterfaceDTO(iface)}, nil
 }
 
 func ListInterfaces(req ListInterfacesRequest) (InterfacesResponse, error) {
 	if err := validate.Struct(req); err != nil {
-		return InterfacesResponse{}, ErrValidation
+		return InterfacesResponse{}, err
 	}
 	db := database.GetDB()
-	var ifaces []models.Interface
-	query := db
-	if req.AppID != nil {
-		query = query.Where("app_id = ?", *req.AppID)
+	// 查数据库判断应用是否存在
+	var app models.Application
+	if err := db.First(&app, req.AppID).Error; err != nil {
+		return InterfacesResponse{}, errors.New("no such application")
 	}
+	var ifaces []models.Interface
+	query := db.Where("app_id = ?", req.AppID)
 	if err := query.Find(&ifaces).Error; err != nil {
 		return InterfacesResponse{}, err
 	}
@@ -164,21 +161,13 @@ func ListInterfaces(req ListInterfacesRequest) (InterfacesResponse, error) {
 }
 
 func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
-	if err := validate.Var(req.ID, "required,gt=0"); err != nil {
-		return InterfaceResponse{}, ErrValidation
+	if err := validate.Struct(req); err != nil {
+		return InterfaceResponse{}, err
 	}
 	db := database.GetDB()
 	var existing models.Interface
 	if err := db.First(&existing, req.ID).Error; err != nil {
-		return InterfaceResponse{}, ErrNotFound
-	}
-	// apply changes
-	if req.AppID != nil && *req.AppID != existing.AppID {
-		var app models.Application
-		if err := db.First(&app, *req.AppID).Error; err != nil {
-			return InterfaceResponse{}, ErrNotFound
-		}
-		existing.AppID = *req.AppID
+		return InterfaceResponse{}, errors.New("no such interface")
 	}
 	if req.Name != nil {
 		existing.Name = *req.Name
@@ -199,22 +188,23 @@ func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
 		existing.PostProcess = *req.PostProcess
 	}
 	if req.Options != nil {
-		existing.Options = *req.Options
+		opt, err := json.Marshal(req.Options)
+		if err != nil {
+			return InterfaceResponse{}, errors.New("interface options is invalid")
+		}
+		if len(opt) > 1048576 {
+			return InterfaceResponse{}, errors.New("interface options exceed max size")
+		}
+		existing.Options = string(opt)
 	}
 	if req.Enabled != nil {
 		existing.Enabled = *req.Enabled
 	}
-	// validate options
-	if opts, err := existing.GetToolOptions(); err != nil {
-		return InterfaceResponse{}, ErrInvalidOptions
-	} else if err = opts.Validate(); err != nil {
-		return InterfaceResponse{}, ErrInvalidOptions
-	}
-	// unique name within app
+
 	var cnt int64
 	db.Model(&models.Interface{}).Where("app_id = ? AND name = ? AND id <> ?", existing.AppID, existing.Name, existing.ID).Count(&cnt)
 	if cnt > 0 {
-		return InterfaceResponse{}, ErrIfaceNameExists
+		return InterfaceResponse{}, errors.New("interface name already exists in the application")
 	}
 	if err := db.Save(&existing).Error; err != nil {
 		return InterfaceResponse{}, err
@@ -224,12 +214,12 @@ func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
 
 func DeleteInterface(req DeleteInterfaceRequest) (EmptyResponse, error) {
 	if err := validate.Struct(req); err != nil {
-		return EmptyResponse{}, ErrValidation
+		return EmptyResponse{}, err
 	}
 	db := database.GetDB()
 	var iface models.Interface
 	if err := db.First(&iface, req.ID).Error; err != nil {
-		return EmptyResponse{}, ErrNotFound
+		return EmptyResponse{}, errors.New("no such interface")
 	}
 	if err := db.Delete(&iface).Error; err != nil {
 		return EmptyResponse{}, err

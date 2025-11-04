@@ -15,17 +15,9 @@ func CreateApplication(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid JSON format")
 		return
 	}
-
 	resp, err := service.CreateApplication(req)
 	if err != nil {
-		switch err {
-		case service.ErrValidation:
-			c.String(http.StatusBadRequest, err.Error())
-		case service.ErrAppNameExists:
-			c.String(http.StatusBadRequest, err.Error())
-		default:
-			c.String(http.StatusInternalServerError, "Failed to create application")
-		}
+		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, resp.Application)
@@ -48,17 +40,9 @@ func GetApplication(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid application ID")
 		return
 	}
-
 	resp, err := service.GetApplication(service.GetApplicationRequest{ID: id})
 	if err != nil {
-		switch err {
-		case service.ErrValidation:
-			c.String(http.StatusBadRequest, "Invalid application ID")
-		case service.ErrNotFound:
-			c.String(http.StatusNotFound, "Application not found")
-		default:
-			c.String(http.StatusInternalServerError, "Failed to fetch application")
-		}
+		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, resp.Application)
@@ -81,16 +65,7 @@ func UpdateApplication(c *gin.Context) {
 
 	resp, err := service.UpdateApplication(body)
 	if err != nil {
-		switch err {
-		case service.ErrValidation:
-			c.String(http.StatusBadRequest, "Invalid parameters")
-		case service.ErrNotFound:
-			c.String(http.StatusNotFound, "Application not found")
-		case service.ErrAppNameExists:
-			c.String(http.StatusBadRequest, "Application name already exists")
-		default:
-			c.String(http.StatusInternalServerError, "Failed to update application")
-		}
+		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, resp.Application)
@@ -103,17 +78,9 @@ func DeleteApplication(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid application ID")
 		return
 	}
-
 	_, err = service.DeleteApplication(service.DeleteApplicationRequest{ID: id})
 	if err != nil {
-		switch err {
-		case service.ErrValidation:
-			c.String(http.StatusBadRequest, "Invalid application ID")
-		case service.ErrNotFound:
-			c.String(http.StatusNotFound, "Application not found")
-		default:
-			c.String(http.StatusInternalServerError, "Failed to delete application")
-		}
+		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
 	c.Status(http.StatusNoContent)
