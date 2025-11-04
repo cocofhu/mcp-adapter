@@ -2,8 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"mcp-adapter/backend/database"
-	"mcp-adapter/backend/models"
+	"mcp-adapter/backend/service"
 	"net/http"
 	"strconv"
 
@@ -12,48 +11,39 @@ import (
 
 // CreateApplication 创建应用
 func CreateApplication(w http.ResponseWriter, r *http.Request) {
-	var app models.Application
-	if err := json.NewDecoder(r.Body).Decode(&app); err != nil {
+	var req service.CreateApplicationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
 
-	db := database.GetDB()
-	// 判断应用名字是否重复（全局唯一）
-	var count int64
-	db.Model(&models.Application{}).Where("name = ?", app.Name).Count(&count)
-	if count > 0 {
-		http.Error(w, "Application name already exists", http.StatusBadRequest)
-		return
-	}
-
-	if err := db.Create(&app).Error; err != nil {
-		http.Error(w, "Failed to create application", http.StatusInternalServerError)
+	resp, err := service.CreateApplication(req)
+	if err != nil {
+		switch err {
+		case service.ErrValidation:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		case service.ErrAppNameExists:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "Failed to create application", http.StatusInternalServerError)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(app)
-	if err != nil {
-		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
-	}
+	_ = json.NewEncoder(w).Encode(resp.Application)
 }
 
 // GetApplications 获取所有应用
 func GetApplications(w http.ResponseWriter, r *http.Request) {
-	var apps []models.Application
-	db := database.GetDB()
-
-	if err := db.Find(&apps).Error; err != nil {
+	resp, err := service.ListApplications(service.ListApplicationsRequest{})
+	if err != nil {
 		http.Error(w, "Failed to fetch applications", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(apps)
-	if err != nil {
-		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
-	}
+	_ = json.NewEncoder(w).Encode(resp.Applications)
 }
 
 // GetApplication 获取单个应用
@@ -65,22 +55,24 @@ func GetApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var app models.Application
-	db := database.GetDB()
-
-	if err := db.First(&app, id).Error; err != nil {
-		http.Error(w, "Application not found", http.StatusNotFound)
+	resp, err := service.GetApplication(service.GetApplicationRequest{ID: id})
+	if err != nil {
+		switch err {
+		case service.ErrValidation:
+			http.Error(w, "Invalid application ID", http.StatusBadRequest)
+		case service.ErrNotFound:
+			http.Error(w, "Application not found", http.StatusNotFound)
+		default:
+			http.Error(w, "Failed to fetch application", http.StatusInternalServerError)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(app)
-	if err != nil {
-		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
-	}
+	_ = json.NewEncoder(w).Encode(resp.Application)
 }
 
-// UpdateApplication 更新应用
+// UpdateApplication 更新应用（部分字段）
 func UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseInt(vars["id"], 10, 64)
@@ -89,45 +81,30 @@ func UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var app models.Application
-	db := database.GetDB()
-
-	if err := db.First(&app, id).Error; err != nil {
-		http.Error(w, "Application not found", http.StatusNotFound)
-		return
-	}
-
-	var updateData models.Application
-	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+	var body service.UpdateApplicationRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
+	body.ID = id
 
-	// 保持原有ID
-	updateData.ID = app.ID
-
-	// 如果更新了名称，校验是否重复（全局唯一）
-	newName := updateData.Name
-	if newName == "" {
-		newName = app.Name
-	}
-	var cnt int64
-	db.Model(&models.Application{}).Where("name = ? AND id <> ?", newName, app.ID).Count(&cnt)
-	if cnt > 0 {
-		http.Error(w, "Application name already exists", http.StatusBadRequest)
-		return
-	}
-
-	if err := db.Save(&updateData).Error; err != nil {
-		http.Error(w, "Failed to update application", http.StatusInternalServerError)
+	resp, err := service.UpdateApplication(body)
+	if err != nil {
+		switch err {
+		case service.ErrValidation:
+			http.Error(w, "Invalid parameters", http.StatusBadRequest)
+		case service.ErrNotFound:
+			http.Error(w, "Application not found", http.StatusNotFound)
+		case service.ErrAppNameExists:
+			http.Error(w, "Application name already exists", http.StatusBadRequest)
+		default:
+			http.Error(w, "Failed to update application", http.StatusInternalServerError)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(updateData)
-	if err != nil {
-		http.Error(w, "Failed to create interface", http.StatusInternalServerError)
-	}
+	_ = json.NewEncoder(w).Encode(resp.Application)
 }
 
 // DeleteApplication 删除应用
@@ -139,18 +116,16 @@ func DeleteApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := database.GetDB()
-
-	// 检查应用是否存在
-	var app models.Application
-	if err := db.First(&app, id).Error; err != nil {
-		http.Error(w, "Application not found", http.StatusNotFound)
-		return
-	}
-
-	// 删除应用及其关联的接口
-	if err := db.Delete(&app).Error; err != nil {
-		http.Error(w, "Failed to delete application", http.StatusInternalServerError)
+	_, err = service.DeleteApplication(service.DeleteApplicationRequest{ID: id})
+	if err != nil {
+		switch err {
+		case service.ErrValidation:
+			http.Error(w, "Invalid application ID", http.StatusBadRequest)
+		case service.ErrNotFound:
+			http.Error(w, "Application not found", http.StatusNotFound)
+		default:
+			http.Error(w, "Failed to delete application", http.StatusInternalServerError)
+		}
 		return
 	}
 
