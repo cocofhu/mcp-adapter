@@ -4,16 +4,16 @@ import (
 	"mcp-adapter/backend/adapter"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
-func ServeSSE(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	path := vars["path"]
+func ServeSSE(c *gin.Context) {
+	path := c.Param("path")
 	impl := adapter.GetServerImpl(path)
 	if impl == nil {
-		http.Error(w, "sse path not found", http.StatusNotFound)
+		c.String(http.StatusNotFound, "sse path not found")
 		return
 	}
-	impl.ServeHTTP(w, r)
+	// 复用底层 http.Handler
+	impl.ServeHTTP(c.Writer, c.Request)
 }

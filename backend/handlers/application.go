@@ -1,19 +1,18 @@
 package handlers
 
 import (
-	"encoding/json"
 	"mcp-adapter/backend/service"
 	"net/http"
 	"strconv"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
 // CreateApplication 创建应用
-func CreateApplication(w http.ResponseWriter, r *http.Request) {
+func CreateApplication(c *gin.Context) {
 	var req service.CreateApplicationRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.String(http.StatusBadRequest, "Invalid JSON format")
 		return
 	}
 
@@ -21,37 +20,32 @@ func CreateApplication(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case service.ErrValidation:
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			c.String(http.StatusBadRequest, err.Error())
 		case service.ErrAppNameExists:
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			c.String(http.StatusBadRequest, err.Error())
 		default:
-			http.Error(w, "Failed to create application", http.StatusInternalServerError)
+			c.String(http.StatusInternalServerError, "Failed to create application")
 		}
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp.Application)
+	c.JSON(http.StatusOK, resp.Application)
 }
 
 // GetApplications 获取所有应用
-func GetApplications(w http.ResponseWriter, r *http.Request) {
+func GetApplications(c *gin.Context) {
 	resp, err := service.ListApplications(service.ListApplicationsRequest{})
 	if err != nil {
-		http.Error(w, "Failed to fetch applications", http.StatusInternalServerError)
+		c.String(http.StatusInternalServerError, "Failed to fetch applications")
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp.Applications)
+	c.JSON(http.StatusOK, resp.Applications)
 }
 
 // GetApplication 获取单个应用
-func GetApplication(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+func GetApplication(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid application ID", http.StatusBadRequest)
+		c.String(http.StatusBadRequest, "Invalid application ID")
 		return
 	}
 
@@ -59,31 +53,28 @@ func GetApplication(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case service.ErrValidation:
-			http.Error(w, "Invalid application ID", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Invalid application ID")
 		case service.ErrNotFound:
-			http.Error(w, "Application not found", http.StatusNotFound)
+			c.String(http.StatusNotFound, "Application not found")
 		default:
-			http.Error(w, "Failed to fetch application", http.StatusInternalServerError)
+			c.String(http.StatusInternalServerError, "Failed to fetch application")
 		}
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp.Application)
+	c.JSON(http.StatusOK, resp.Application)
 }
 
 // UpdateApplication 更新应用（部分字段）
-func UpdateApplication(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+func UpdateApplication(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid application ID", http.StatusBadRequest)
+		c.String(http.StatusBadRequest, "Invalid application ID")
 		return
 	}
 
 	var body service.UpdateApplicationRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.String(http.StatusBadRequest, "Invalid JSON format")
 		return
 	}
 	body.ID = id
@@ -92,27 +83,24 @@ func UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case service.ErrValidation:
-			http.Error(w, "Invalid parameters", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Invalid parameters")
 		case service.ErrNotFound:
-			http.Error(w, "Application not found", http.StatusNotFound)
+			c.String(http.StatusNotFound, "Application not found")
 		case service.ErrAppNameExists:
-			http.Error(w, "Application name already exists", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Application name already exists")
 		default:
-			http.Error(w, "Failed to update application", http.StatusInternalServerError)
+			c.String(http.StatusInternalServerError, "Failed to update application")
 		}
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp.Application)
+	c.JSON(http.StatusOK, resp.Application)
 }
 
 // DeleteApplication 删除应用
-func DeleteApplication(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+func DeleteApplication(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid application ID", http.StatusBadRequest)
+		c.String(http.StatusBadRequest, "Invalid application ID")
 		return
 	}
 
@@ -120,14 +108,13 @@ func DeleteApplication(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case service.ErrValidation:
-			http.Error(w, "Invalid application ID", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Invalid application ID")
 		case service.ErrNotFound:
-			http.Error(w, "Application not found", http.StatusNotFound)
+			c.String(http.StatusNotFound, "Application not found")
 		default:
-			http.Error(w, "Failed to delete application", http.StatusInternalServerError)
+			c.String(http.StatusInternalServerError, "Failed to delete application")
 		}
 		return
 	}
-
-	w.WriteHeader(http.StatusNoContent)
+	c.Status(http.StatusNoContent)
 }

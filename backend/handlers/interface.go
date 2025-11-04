@@ -1,19 +1,18 @@
 package handlers
 
 import (
-	"encoding/json"
 	"mcp-adapter/backend/service"
 	"net/http"
 	"strconv"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
 // CreateInterface 创建接口
-func CreateInterface(w http.ResponseWriter, r *http.Request) {
+func CreateInterface(c *gin.Context) {
 	var req service.CreateInterfaceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.String(http.StatusBadRequest, "Invalid JSON format")
 		return
 	}
 
@@ -21,27 +20,25 @@ func CreateInterface(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case service.ErrValidation:
-			http.Error(w, "Invalid parameters", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Invalid parameters")
 		case service.ErrNotFound:
-			http.Error(w, "Application not found", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Application not found")
 		case service.ErrIfaceNameExists:
-			http.Error(w, "Interface name already exists", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Interface name already exists")
 		case service.ErrInvalidOptions:
-			http.Error(w, "Options validation failed", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Options validation failed")
 		default:
-			http.Error(w, "Failed to create interface", http.StatusInternalServerError)
+			c.String(http.StatusInternalServerError, "Failed to create interface")
 		}
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp.Interface)
+	c.JSON(http.StatusOK, resp.Interface)
 }
 
 // GetInterfaces 获取所有接口
-func GetInterfaces(w http.ResponseWriter, r *http.Request) {
+func GetInterfaces(c *gin.Context) {
 	var req service.ListInterfacesRequest
-	if appIDStr := r.URL.Query().Get("app_id"); appIDStr != "" {
+	if appIDStr := c.Query("app_id"); appIDStr != "" {
 		if id, err := strconv.ParseInt(appIDStr, 10, 64); err == nil {
 			req.AppID = &id
 		}
@@ -50,23 +47,20 @@ func GetInterfaces(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case service.ErrValidation:
-			http.Error(w, "Invalid parameters", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Invalid parameters")
 		default:
-			http.Error(w, "Failed to fetch interfaces", http.StatusInternalServerError)
+			c.String(http.StatusInternalServerError, "Failed to fetch interfaces")
 		}
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp.Interfaces)
+	c.JSON(http.StatusOK, resp.Interfaces)
 }
 
 // GetInterface 获取单个接口
-func GetInterface(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+func GetInterface(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid interface ID", http.StatusBadRequest)
+		c.String(http.StatusBadRequest, "Invalid interface ID")
 		return
 	}
 
@@ -74,31 +68,28 @@ func GetInterface(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case service.ErrValidation:
-			http.Error(w, "Invalid interface ID", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Invalid interface ID")
 		case service.ErrNotFound:
-			http.Error(w, "Interface not found", http.StatusNotFound)
+			c.String(http.StatusNotFound, "Interface not found")
 		default:
-			http.Error(w, "Failed to fetch interface", http.StatusInternalServerError)
+			c.String(http.StatusInternalServerError, "Failed to fetch interface")
 		}
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp.Interface)
+	c.JSON(http.StatusOK, resp.Interface)
 }
 
 // UpdateInterface 更新接口（部分字段）
-func UpdateInterface(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+func UpdateInterface(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid interface ID", http.StatusBadRequest)
+		c.String(http.StatusBadRequest, "Invalid interface ID")
 		return
 	}
 
 	var body service.UpdateInterfaceRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.String(http.StatusBadRequest, "Invalid JSON format")
 		return
 	}
 	body.ID = id
@@ -107,29 +98,26 @@ func UpdateInterface(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case service.ErrValidation:
-			http.Error(w, "Invalid parameters", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Invalid parameters")
 		case service.ErrNotFound:
-			http.Error(w, "Interface or Application not found", http.StatusNotFound)
+			c.String(http.StatusNotFound, "Interface or Application not found")
 		case service.ErrIfaceNameExists:
-			http.Error(w, "Interface name already exists", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Interface name already exists")
 		case service.ErrInvalidOptions:
-			http.Error(w, "Options validation failed", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Options validation failed")
 		default:
-			http.Error(w, "Failed to update interface", http.StatusInternalServerError)
+			c.String(http.StatusInternalServerError, "Failed to update interface")
 		}
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp.Interface)
+	c.JSON(http.StatusOK, resp.Interface)
 }
 
 // DeleteInterface 删除接口
-func DeleteInterface(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+func DeleteInterface(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid interface ID", http.StatusBadRequest)
+		c.String(http.StatusBadRequest, "Invalid interface ID")
 		return
 	}
 
@@ -137,14 +125,13 @@ func DeleteInterface(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case service.ErrValidation:
-			http.Error(w, "Invalid interface ID", http.StatusBadRequest)
+			c.String(http.StatusBadRequest, "Invalid interface ID")
 		case service.ErrNotFound:
-			http.Error(w, "Interface not found", http.StatusNotFound)
+			c.String(http.StatusNotFound, "Interface not found")
 		default:
-			http.Error(w, "Failed to delete interface", http.StatusInternalServerError)
+			c.String(http.StatusInternalServerError, "Failed to delete interface")
 		}
 		return
 	}
-
-	w.WriteHeader(http.StatusNoContent)
+	c.Status(http.StatusNoContent)
 }

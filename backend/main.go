@@ -5,7 +5,6 @@ import (
 	"mcp-adapter/backend/adapter"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/routes"
-	"net/http"
 
 	_ "modernc.org/sqlite"
 )
@@ -20,5 +19,5 @@ func main() {
 	adapter.InitServer()
 	// 启动服务器
 	log.Println("Server starting on :8080")
-	log.Fatal(http.ListenAndServe(":8080", router))
+	_ = router.Run(":8080")
 }
