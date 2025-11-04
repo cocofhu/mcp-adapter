@@ -15,7 +15,7 @@ type Application struct {
 	Name        string         `json:"name" gorm:"not null;size:255" validate:"required"` // 应用名称
 	Description string         `json:"description" gorm:"size:500"`                       // 应用描述
 	Path        string         `json:"path" gorm:"size:255"`                              // 应用路径标识
-	Protocol    string         `json:"protocol" gorm:"size:255"`                          // 应用对外协议 stdio, sse, streamable
+	Protocol    string         `json:"protocol" gorm:"size:255"`                          // 应用对外协议 sse, streamable
 	PostProcess string         `json:"post_process" gorm:"size:1048576"`                  // 后处理脚本
 	Environment string         `json:"environment" gorm:"size:1048576"`                   // 环境变量 (JSON String)
 	Enabled     bool           `json:"enabled" gorm:"default:true"`                       // 是否启用
