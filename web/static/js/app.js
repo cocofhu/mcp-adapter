@@ -305,6 +305,15 @@ async function deleteApplication(id) {
 
 // ========== 自定义类型管理 ==========
 
+// 获取字段类型的显示名称
+function getFieldTypeDisplay(field) {
+    if (field.type === 'custom' && field.ref) {
+        const refType = state.customTypes.find(t => t.id === field.ref);
+        return refType ? refType.name : 'custom';
+    }
+    return field.type;
+}
+
 async function loadCustomTypes() {
     const appId = document.getElementById('global-app-select').value;
     
@@ -359,7 +368,7 @@ function renderCustomTypes(types) {
                                 <div class="field-info">
                                     <div class="field-name">${field.name}</div>
                                     <div class="field-meta">
-                                        <span>${field.type}${field.is_array ? '[]' : ''}</span>
+                                        <span>${getFieldTypeDisplay(field)}${field.is_array ? '[]' : ''}</span>
                                         ${field.required ? '<span class="badge-danger">必填</span>' : ''}
                                     </div>
                                 </div>
@@ -418,16 +427,26 @@ document.getElementById('create-type-btn').addEventListener('click', () => {
         document.querySelectorAll('.field-row').forEach(row => {
             const fieldName = row.querySelector('.field-name-input').value;
             const fieldType = row.querySelector('.field-type-select').value;
+            const fieldRef = row.querySelector('.field-ref-input')?.value;
+            const fieldIsArray = row.querySelector('.field-array-checkbox')?.checked || false;
             const fieldRequired = row.querySelector('.field-required-checkbox').checked;
             const fieldDesc = row.querySelector('.field-desc-input').value;
             
             if (fieldName) {
-                fields.push({
+                const field = {
                     name: fieldName,
                     type: fieldType,
+                    is_array: fieldIsArray,
                     required: fieldRequired,
                     description: fieldDesc
-                });
+                };
+                
+                // 如果是自定义类型，添加引用
+                if (fieldType === 'custom' && fieldRef) {
+                    field.ref = parseInt(fieldRef);
+                }
+                
+                fields.push(field);
             }
         });
         
@@ -451,14 +470,34 @@ function addFieldRow() {
     const container = document.getElementById('fields-container');
     const row = document.createElement('div');
     row.className = 'field-row mb-2';
+    
+    // 构建类型选项（包含自定义类型）
+    let typeOptions = `
+        <option value="string">string</option>
+        <option value="number">number</option>
+        <option value="boolean">boolean</option>
+    `;
+    
+    // 添加当前应用的自定义类型
+    if (state.customTypes && state.customTypes.length > 0) {
+        typeOptions += '<optgroup label="自定义类型">';
+        state.customTypes.forEach(type => {
+            typeOptions += `<option value="custom" data-ref="${type.id}">${type.name}</option>`;
+        });
+        typeOptions += '</optgroup>';
+    }
+    
     row.innerHTML = `
         <div class="form-row">
             <input type="text" class="field-name-input" placeholder="字段名">
-            <select class="field-type-select">
-                <option value="string">string</option>
-                <option value="number">number</option>
-                <option value="boolean">boolean</option>
+            <select class="field-type-select" onchange="handleTypeChange(this)">
+                ${typeOptions}
             </select>
+            <input type="hidden" class="field-ref-input" value="">
+            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
+                <input type="checkbox" class="field-array-checkbox">
+                数组
+            </label>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                 <input type="checkbox" class="field-required-checkbox">
                 必填
@@ -470,6 +509,19 @@ function addFieldRow() {
         <input type="text" class="field-desc-input" placeholder="字段描述（可选）">
     `;
     container.appendChild(row);
+}
+
+// 处理类型选择变化
+function handleTypeChange(selectElement) {
+    const row = selectElement.closest('.field-row, .param-row');
+    const refInput = row.querySelector('.field-ref-input, .param-ref-input');
+    const selectedOption = selectElement.options[selectElement.selectedIndex];
+    
+    if (selectedOption.value === 'custom' && selectedOption.dataset.ref) {
+        refInput.value = selectedOption.dataset.ref;
+    } else {
+        refInput.value = '';
+    }
 }
 
 function viewCustomType(id) {
@@ -488,7 +540,7 @@ function viewCustomType(id) {
                             <div class="field-info">
                                 <div class="field-name">${field.name}</div>
                                 <div class="field-meta">
-                                    <span>${field.type}${field.is_array ? '[]' : ''}</span>
+                                    <span>${getFieldTypeDisplay(field)}${field.is_array ? '[]' : ''}</span>
                                     ${field.required ? '<span class="badge-danger">必填</span>' : ''}
                                     ${field.description ? `<span>${field.description}</span>` : ''}
                                 </div>
@@ -504,6 +556,29 @@ function viewCustomType(id) {
 function editCustomType(id) {
     const type = state.customTypes.find(t => t.id === id);
     if (!type) return;
+    
+    // 构建类型选项（包含自定义类型，排除当前编辑的类型）
+    const buildTypeOptions = (currentType, currentRef) => {
+        let options = `
+            <option value="string" ${currentType === 'string' ? 'selected' : ''}>string</option>
+            <option value="number" ${currentType === 'number' ? 'selected' : ''}>number</option>
+            <option value="boolean" ${currentType === 'boolean' ? 'selected' : ''}>boolean</option>
+        `;
+        
+        if (state.customTypes && state.customTypes.length > 0) {
+            options += '<optgroup label="自定义类型">';
+            state.customTypes.forEach(ct => {
+                // 排除当前正在编辑的类型，避免循环引用
+                if (ct.id !== type.id) {
+                    const isSelected = currentType === 'custom' && currentRef === ct.id;
+                    options += `<option value="custom" data-ref="${ct.id}" ${isSelected ? 'selected' : ''}>${ct.name}</option>`;
+                }
+            });
+            options += '</optgroup>';
+        }
+        
+        return options;
+    };
     
     showModal('编辑自定义类型', `
         <div class="form-group">
@@ -521,11 +596,14 @@ function editCustomType(id) {
                     <div class="field-row mb-2">
                         <div class="form-row">
                             <input type="text" class="field-name-input" value="${field.name}" placeholder="字段名">
-                            <select class="field-type-select">
-                                <option value="string" ${field.type === 'string' ? 'selected' : ''}>string</option>
-                                <option value="number" ${field.type === 'number' ? 'selected' : ''}>number</option>
-                                <option value="boolean" ${field.type === 'boolean' ? 'selected' : ''}>boolean</option>
+                            <select class="field-type-select" onchange="handleTypeChange(this)">
+                                ${buildTypeOptions(field.type, field.ref)}
                             </select>
+                            <input type="hidden" class="field-ref-input" value="${field.ref || ''}">
+                            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
+                                <input type="checkbox" class="field-array-checkbox" ${field.is_array ? 'checked' : ''}>
+                                数组
+                            </label>
                             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                                 <input type="checkbox" class="field-required-checkbox" ${field.required ? 'checked' : ''}>
                                 必填
@@ -550,16 +628,26 @@ function editCustomType(id) {
         document.querySelectorAll('#edit-fields-container .field-row').forEach(row => {
             const fieldName = row.querySelector('.field-name-input').value;
             const fieldType = row.querySelector('.field-type-select').value;
+            const fieldRef = row.querySelector('.field-ref-input')?.value;
+            const fieldIsArray = row.querySelector('.field-array-checkbox')?.checked || false;
             const fieldRequired = row.querySelector('.field-required-checkbox').checked;
             const fieldDesc = row.querySelector('.field-desc-input').value;
             
             if (fieldName) {
-                fields.push({
+                const field = {
                     name: fieldName,
                     type: fieldType,
+                    is_array: fieldIsArray,
                     required: fieldRequired,
                     description: fieldDesc
-                });
+                };
+                
+                // 如果是自定义类型，添加引用
+                if (fieldType === 'custom' && fieldRef) {
+                    field.ref = parseInt(fieldRef);
+                }
+                
+                fields.push(field);
             }
         });
         
@@ -580,14 +668,34 @@ function addEditFieldRow() {
     const container = document.getElementById('edit-fields-container');
     const row = document.createElement('div');
     row.className = 'field-row mb-2';
+    
+    // 构建类型选项（包含自定义类型）
+    let typeOptions = `
+        <option value="string">string</option>
+        <option value="number">number</option>
+        <option value="boolean">boolean</option>
+    `;
+    
+    // 添加当前应用的自定义类型
+    if (state.customTypes && state.customTypes.length > 0) {
+        typeOptions += '<optgroup label="自定义类型">';
+        state.customTypes.forEach(type => {
+            typeOptions += `<option value="custom" data-ref="${type.id}">${type.name}</option>`;
+        });
+        typeOptions += '</optgroup>';
+    }
+    
     row.innerHTML = `
         <div class="form-row">
             <input type="text" class="field-name-input" placeholder="字段名">
-            <select class="field-type-select">
-                <option value="string">string</option>
-                <option value="number">number</option>
-                <option value="boolean">boolean</option>
+            <select class="field-type-select" onchange="handleTypeChange(this)">
+                ${typeOptions}
             </select>
+            <input type="hidden" class="field-ref-input" value="">
+            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
+                <input type="checkbox" class="field-array-checkbox">
+                数组
+            </label>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                 <input type="checkbox" class="field-required-checkbox">
                 必填
@@ -767,16 +875,26 @@ document.getElementById('create-interface-btn').addEventListener('click', () => 
         document.querySelectorAll('.param-row').forEach(row => {
             const paramName = row.querySelector('.param-name-input').value;
             const paramType = row.querySelector('.param-type-select').value;
+            const paramRef = row.querySelector('.param-ref-input')?.value;
             const paramLocation = row.querySelector('.param-location-select').value;
+            const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
             const paramRequired = row.querySelector('.param-required-checkbox').checked;
             
             if (paramName) {
-                parameters.push({
+                const param = {
                     name: paramName,
                     type: paramType,
                     location: paramLocation,
+                    is_array: paramIsArray,
                     required: paramRequired
-                });
+                };
+                
+                // 如果是自定义类型，添加引用
+                if (paramType === 'custom' && paramRef) {
+                    param.ref = parseInt(paramRef);
+                }
+                
+                parameters.push(param);
             }
         });
         
@@ -807,20 +925,40 @@ function addParamRow() {
     const container = document.getElementById('params-container');
     const row = document.createElement('div');
     row.className = 'param-row mb-2';
+    
+    // 构建类型选项（包含自定义类型）
+    let typeOptions = `
+        <option value="string">string</option>
+        <option value="number">number</option>
+        <option value="boolean">boolean</option>
+    `;
+    
+    // 添加当前应用的自定义类型
+    if (state.customTypes && state.customTypes.length > 0) {
+        typeOptions += '<optgroup label="自定义类型">';
+        state.customTypes.forEach(type => {
+            typeOptions += `<option value="custom" data-ref="${type.id}">${type.name}</option>`;
+        });
+        typeOptions += '</optgroup>';
+    }
+    
     row.innerHTML = `
         <div class="form-row">
             <input type="text" class="param-name-input" placeholder="参数名">
-            <select class="param-type-select">
-                <option value="string">string</option>
-                <option value="number">number</option>
-                <option value="boolean">boolean</option>
+            <select class="param-type-select" onchange="handleTypeChange(this)">
+                ${typeOptions}
             </select>
+            <input type="hidden" class="param-ref-input" value="">
             <select class="param-location-select">
                 <option value="query">query</option>
                 <option value="header">header</option>
                 <option value="body">body</option>
                 <option value="path">path</option>
             </select>
+            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
+                <input type="checkbox" class="param-array-checkbox">
+                数组
+            </label>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                 <input type="checkbox" class="param-required-checkbox">
                 必填
@@ -836,6 +974,15 @@ function addParamRow() {
 function viewInterface(id) {
     const iface = state.interfaces.find(i => i.id === id);
     if (!iface) return;
+    
+    // 获取参数类型的显示名称
+    const getParamTypeDisplay = (param) => {
+        if (param.type === 'custom' && param.ref) {
+            const refType = state.customTypes.find(t => t.id === param.ref);
+            return refType ? refType.name : 'custom';
+        }
+        return param.type;
+    };
     
     showModal(iface.name, `
         <div class="doc-section">
@@ -854,7 +1001,7 @@ function viewInterface(id) {
                             <div class="field-info">
                                 <div class="field-name">${param.name}</div>
                                 <div class="field-meta">
-                                    <span>${param.type}</span>
+                                    <span>${getParamTypeDisplay(param)}${param.is_array ? '[]' : ''}</span>
                                     <span>${param.location}</span>
                                     ${param.required ? '<span class="badge-danger">必填</span>' : ''}
                                 </div>

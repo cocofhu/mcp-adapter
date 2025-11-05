@@ -585,32 +585,43 @@ body {
     display: flex;
     gap: 8px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
-.field-row input[type="text"],
+.field-row input[type="text"]:not(.field-desc-input),
 .field-row select,
-.param-row input[type="text"],
+.param-row input[type="text"]:not(.field-desc-input),
 .param-row select {
-    flex: 1;
-    min-width: 0;
+    flex: 1 1 auto;
+    min-width: 100px;
 }
 
 .field-row .field-name-input,
 .param-row .param-name-input {
-    flex: 2;
+    flex: 2 1 150px;
 }
 
 .field-row .field-type-select,
-.field-row .field-location-select,
-.param-row .param-type-select,
+.param-row .param-type-select {
+    flex: 1.5 1 120px;
+}
+
+.field-row .param-location-select,
 .param-row .param-location-select {
-    flex: 1;
+    flex: 1 1 100px;
 }
 
 .field-row .field-desc-input,
 .param-row .field-desc-input {
     width: 100%;
     margin-top: 8px;
+}
+
+.field-row label,
+.param-row label {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: 13px;
 }
 
 /* 删除按钮 - 小巧版本 */
@@ -628,6 +639,7 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex: 0 0 auto;
 }
 
 .btn-remove:hover {
@@ -637,6 +649,21 @@ body {
 
 .btn-remove i {
     font-size: 12px;
+}
+
+/* 响应式调整 */
+@media (max-width: 1200px) {
+    .field-row .form-row,
+    .param-row .form-row {
+        flex-wrap: wrap;
+    }
+    
+    .field-row input[type="text"]:not(.field-desc-input),
+    .field-row select,
+    .param-row input[type="text"]:not(.field-desc-input),
+    .param-row select {
+        min-width: 150px;
+    }
 }
 
 /* ========== 提示框 ========== */

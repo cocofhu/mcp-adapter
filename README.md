@@ -4,17 +4,19 @@
 
 ## ✨ 功能特性
 
-### 🎨 自定义类型系统（新增）
+### 🎨 自定义类型系统
 - **类型定义** - 创建可复用的自定义类型（类似 TypeScript interface）
-- **嵌套类型** - 支持类型之间的引用和嵌套
-- **数组支持** - 支持数组类型定义
+- **类型引用** - 字段可以引用其他自定义类型，构建复杂数据结构
+- **数组支持** - 任何类型都可以声明为数组（如 `string[]`、`User[]`）
 - **类型复用** - 在多个接口间共享类型定义
-- **引用完整性** - 自动检查类型引用的有效性
+- **引用完整性** - 自动检查类型引用的有效性，防止删除被引用的类型
+- **循环引用保护** - 编辑类型时自动排除自引用
 
 ### 🔌 接口管理
 - **多种 HTTP 方法** - 支持 GET、POST、PUT、DELETE、PATCH、HEAD、OPTIONS
 - **灵活参数配置** - 支持 query、header、body、path 四种参数位置
 - **参数类型** - 支持基本类型（number, string, boolean）和自定义类型
+- **数组参数** - 参数可以是数组类型
 - **默认值支持** - 为参数设置默认值
 - **必填验证** - 自动验证必填参数
 
@@ -28,6 +30,7 @@
 - **批量查询优化** - 避免 N+1 查询问题
 - **引用检查** - 防止删除被引用的类型
 - **数据验证** - 完整的输入验证
+- **现代化 UI** - 响应式设计，支持移动端
 
 ## 🚀 快速开始
 
@@ -49,19 +52,36 @@ go run main.go
 
 打开浏览器访问 `http://localhost:8080`，即可使用 Web 界面管理应用、类型和接口。
 
-详细使用说明请参考 [前端使用指南](./FRONTEND_GUIDE.md)。
+详细使用说明请参考：
+- [前端使用指南](./FRONTEND_GUIDE.md)
+- [自定义类型指南](./CUSTOM_TYPE_GUIDE.md)
 
 ### 运行测试
 
-**Linux/Mac**:
+**基础功能测试**:
+
+Linux/Mac:
 ```bash
 chmod +x test_api.sh
 ./test_api.sh
 ```
 
-**Windows**:
+Windows:
 ```powershell
 .\test_api.ps1
+```
+
+**自定义类型功能测试**:
+
+Linux/Mac:
+```bash
+chmod +x test_custom_types.sh
+./test_custom_types.sh
+```
+
+Windows:
+```powershell
+.\test_custom_types.ps1
 ```
 
 ## 📖 使用指南
@@ -81,6 +101,8 @@ curl -X POST http://localhost:8080/api/applications \
 
 ### 2. 创建自定义类型
 
+**基础类型示例**:
+
 ```bash
 curl -X POST http://localhost:8080/api/custom-types \
   -H "Content-Type: application/json" \
@@ -91,7 +113,37 @@ curl -X POST http://localhost:8080/api/custom-types \
     "fields": [
       {"name": "id", "type": "number", "required": true},
       {"name": "name", "type": "string", "required": true},
-      {"name": "email", "type": "string", "required": false}
+      {"name": "email", "type": "string", "required": false},
+      {"name": "tags", "type": "string", "is_array": true, "required": false}
+    ]
+  }'
+```
+
+**引用其他类型**:
+
+```bash
+# 先创建 Address 类型
+curl -X POST http://localhost:8080/api/custom-types \
+  -H "Content-Type: application/json" \
+  -d '{
+    "app_id": 1,
+    "name": "Address",
+    "fields": [
+      {"name": "street", "type": "string", "required": true},
+      {"name": "city", "type": "string", "required": true}
+    ]
+  }'
+
+# 创建引用 User 和 Address 的 UserProfile 类型
+curl -X POST http://localhost:8080/api/custom-types \
+  -H "Content-Type: application/json" \
+  -d '{
+    "app_id": 1,
+    "name": "UserProfile",
+    "fields": [
+      {"name": "user", "type": "custom", "ref": 1, "required": true},
+      {"name": "address", "type": "custom", "ref": 2, "required": false},
+      {"name": "friends", "type": "custom", "ref": 1, "is_array": true, "required": false}
     ]
   }'
 ```
