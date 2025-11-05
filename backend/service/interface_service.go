@@ -5,7 +5,102 @@ import (
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"time"
+
+	"gorm.io/gorm"
 )
+
+// ========== 循环引用检测 ==========
+
+// checkInterfaceParameterCycle 检测接口参数是否存在循环引用
+// 接口参数可能引用自定义类型,而自定义类型的字段也可能引用其他自定义类型
+func checkInterfaceParameterCycle(db *gorm.DB, appID int64, params []CreateInterfaceParameterReq) error {
+	// 构建引用图: typeID -> []refTypeID
+	graph := make(map[int64][]int64)
+	
+	// 获取应用下所有自定义类型及其字段
+	var existingTypes []models.CustomType
+	db.Where("app_id = ?", appID).Find(&existingTypes)
+	
+	typeIDSet := make(map[int64]bool)
+	for _, t := range existingTypes {
+		typeIDSet[t.ID] = true
+		graph[t.ID] = []int64{}
+	}
+	
+	// 获取所有字段的引用关系
+	var existingFields []models.CustomTypeField
+	for tid := range typeIDSet {
+		var fields []models.CustomTypeField
+		db.Where("custom_type_id = ?", tid).Find(&fields)
+		existingFields = append(existingFields, fields...)
+	}
+	
+	// 构建引用关系
+	for _, field := range existingFields {
+		if field.Type == "custom" && field.Ref != nil {
+			graph[field.CustomTypeID] = append(graph[field.CustomTypeID], *field.Ref)
+		}
+	}
+	
+	// DFS 检测环
+	visited := make(map[int64]bool)
+	recStack := make(map[int64]bool)
+	
+	var dfs func(int64) bool
+	dfs = func(node int64) bool {
+		visited[node] = true
+		recStack[node] = true
+		
+		for _, neighbor := range graph[node] {
+			if !visited[neighbor] {
+				if dfs(neighbor) {
+					return true
+				}
+			} else if recStack[neighbor] {
+				// 发现环
+				return true
+			}
+		}
+		
+		recStack[node] = false
+		return false
+	}
+	
+	// 检查所有参数引用的类型
+	for _, param := range params {
+		if param.Type == "custom" && param.Ref != nil {
+			// 从该类型开始检测是否有环
+			visited = make(map[int64]bool)
+			recStack = make(map[int64]bool)
+			if dfs(*param.Ref) {
+				return errors.New("circular reference detected in interface parameters")
+			}
+		}
+	}
+	
+	return nil
+}
+
+// checkInterfaceParameterCycleForUpdate 检测更新时的循环引用
+func checkInterfaceParameterCycleForUpdate(db *gorm.DB, appID int64, params []UpdateInterfaceParameterReq) error {
+	// 转换为 CreateInterfaceParameterReq 格式
+	createParams := make([]CreateInterfaceParameterReq, len(params))
+	for i, p := range params {
+		createParams[i] = CreateInterfaceParameterReq{
+			Name:         p.Name,
+			Type:         p.Type,
+			Ref:          p.Ref,
+			Location:     p.Location,
+			IsArray:      p.IsArray,
+			Required:     p.Required,
+			Description:  p.Description,
+			DefaultValue: p.DefaultValue,
+		}
+	}
+	return checkInterfaceParameterCycle(db, appID, createParams)
+}
+
+// ========== Request/Response 结构体 ==========
 
 type CreateInterfaceRequest struct {
 	AppID       int64                           `json:"app_id" validate:"required,gt=0"`
@@ -174,6 +269,11 @@ func CreateInterface(req CreateInterfaceRequest) (InterfaceResponse, error) {
 				return InterfaceResponse{}, errors.New("parameter reference must belong to the same application")
 			}
 		}
+	}
+	
+	// 检测循环引用
+	if err := checkInterfaceParameterCycle(db, req.AppID, req.Parameters); err != nil {
+		return InterfaceResponse{}, err
 	}
 	
 	// 创建接口
@@ -356,6 +456,12 @@ func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
 					return InterfaceResponse{}, errors.New("parameter reference must belong to the same application")
 				}
 			}
+		}
+		
+		// 检测循环引用
+		if err := checkInterfaceParameterCycleForUpdate(tx, existing.AppID, *req.Parameters); err != nil {
+			tx.Rollback()
+			return InterfaceResponse{}, err
 		}
 		
 		// 删除旧参数

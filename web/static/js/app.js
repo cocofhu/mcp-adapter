@@ -805,11 +805,21 @@ function getMethodColor(method) {
 }
 
 // 创建接口
-document.getElementById('create-interface-btn').addEventListener('click', () => {
+document.getElementById('create-interface-btn').addEventListener('click', async () => {
     const appId = document.getElementById('global-app-select').value;
     if (!appId) {
         showToast('请先选择一个应用', 'warning');
         return;
+    }
+    
+    // 确保已加载自定义类型
+    if (!state.customTypes || state.customTypes.length === 0) {
+        try {
+            const types = await apiRequest(`/custom-types?app_id=${appId}`);
+            state.customTypes = types;
+        } catch (error) {
+            console.error('加载自定义类型失败:', error);
+        }
     }
     
     showModal('创建接口', `
@@ -971,6 +981,56 @@ function addParamRow() {
     container.appendChild(row);
 }
 
+function addEditParamRow() {
+    const container = document.getElementById('edit-params-container');
+    const row = document.createElement('div');
+    row.className = 'param-row mb-2';
+    
+    // 构建类型选项（包含自定义类型）
+    let typeOptions = `
+        <option value="string">string</option>
+        <option value="number">number</option>
+        <option value="boolean">boolean</option>
+    `;
+    
+    // 添加当前应用的自定义类型
+    if (state.customTypes && state.customTypes.length > 0) {
+        typeOptions += '<optgroup label="自定义类型">';
+        state.customTypes.forEach(type => {
+            typeOptions += `<option value="custom" data-ref="${type.id}">${type.name}</option>`;
+        });
+        typeOptions += '</optgroup>';
+    }
+    
+    row.innerHTML = `
+        <div class="form-row">
+            <input type="text" class="param-name-input" placeholder="参数名">
+            <select class="param-type-select" onchange="handleTypeChange(this)">
+                ${typeOptions}
+            </select>
+            <input type="hidden" class="param-ref-input" value="">
+            <select class="param-location-select">
+                <option value="query">query</option>
+                <option value="header">header</option>
+                <option value="body">body</option>
+                <option value="path">path</option>
+            </select>
+            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
+                <input type="checkbox" class="param-array-checkbox">
+                数组
+            </label>
+            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
+                <input type="checkbox" class="param-required-checkbox">
+                必填
+            </label>
+            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    container.appendChild(row);
+}
+
 function viewInterface(id) {
     const iface = state.interfaces.find(i => i.id === id);
     if (!iface) return;
@@ -1014,9 +1074,175 @@ function viewInterface(id) {
     `, null, false);
 }
 
-function editInterface(id) {
-    // 简化版编辑，完整版需要更复杂的表单
-    showToast('编辑功能开发中...', 'info');
+async function editInterface(id) {
+    const iface = state.interfaces.find(i => i.id === id);
+    if (!iface) return;
+    
+    // 确保已加载自定义类型
+    const appId = document.getElementById('global-app-select').value;
+    if (appId && (!state.customTypes || state.customTypes.length === 0)) {
+        try {
+            const types = await apiRequest(`/custom-types?app_id=${appId}`);
+            state.customTypes = types;
+        } catch (error) {
+            console.error('加载自定义类型失败:', error);
+        }
+    }
+    
+    // 构建类型选项（包含自定义类型）
+    const buildParamTypeOptions = (currentType, currentRef) => {
+        let options = `
+            <option value="string" ${currentType === 'string' ? 'selected' : ''}>string</option>
+            <option value="number" ${currentType === 'number' ? 'selected' : ''}>number</option>
+            <option value="boolean" ${currentType === 'boolean' ? 'selected' : ''}>boolean</option>
+        `;
+        
+        if (state.customTypes && state.customTypes.length > 0) {
+            options += '<optgroup label="自定义类型">';
+            state.customTypes.forEach(type => {
+                const isSelected = currentType === 'custom' && currentRef === type.id;
+                options += `<option value="custom" data-ref="${type.id}" ${isSelected ? 'selected' : ''}>${type.name}</option>`;
+            });
+            options += '</optgroup>';
+        }
+        
+        return options;
+    };
+    
+    showModal('编辑接口', `
+        <div class="form-group">
+            <label>接口名称</label>
+            <input type="text" id="edit-interface-name" value="${iface.name}">
+        </div>
+        <div class="form-group">
+            <label>接口描述</label>
+            <textarea id="edit-interface-description" rows="2">${iface.description || ''}</textarea>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>HTTP 方法</label>
+                <select id="edit-interface-method">
+                    <option value="GET" ${iface.method === 'GET' ? 'selected' : ''}>GET</option>
+                    <option value="POST" ${iface.method === 'POST' ? 'selected' : ''}>POST</option>
+                    <option value="PUT" ${iface.method === 'PUT' ? 'selected' : ''}>PUT</option>
+                    <option value="DELETE" ${iface.method === 'DELETE' ? 'selected' : ''}>DELETE</option>
+                    <option value="PATCH" ${iface.method === 'PATCH' ? 'selected' : ''}>PATCH</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>协议</label>
+                <select id="edit-interface-protocol">
+                    <option value="http" ${iface.protocol === 'http' ? 'selected' : ''}>HTTP</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>URL</label>
+            <input type="text" id="edit-interface-url" value="${iface.url}">
+        </div>
+        <div class="form-group">
+            <label>认证类型</label>
+            <select id="edit-interface-auth">
+                <option value="none" ${iface.auth_type === 'none' ? 'selected' : ''}>无认证</option>
+                <option value="bearer" ${iface.auth_type === 'bearer' ? 'selected' : ''}>Bearer Token</option>
+                <option value="basic" ${iface.auth_type === 'basic' ? 'selected' : ''}>Basic Auth</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>参数定义</label>
+            <div id="edit-params-container">
+                ${iface.parameters?.map(param => `
+                    <div class="param-row mb-2">
+                        <div class="form-row">
+                            <input type="text" class="param-name-input" value="${param.name}" placeholder="参数名">
+                            <select class="param-type-select" onchange="handleTypeChange(this)">
+                                ${buildParamTypeOptions(param.type, param.ref)}
+                            </select>
+                            <input type="hidden" class="param-ref-input" value="${param.ref || ''}">
+                            <select class="param-location-select">
+                                <option value="query" ${param.location === 'query' ? 'selected' : ''}>query</option>
+                                <option value="header" ${param.location === 'header' ? 'selected' : ''}>header</option>
+                                <option value="body" ${param.location === 'body' ? 'selected' : ''}>body</option>
+                                <option value="path" ${param.location === 'path' ? 'selected' : ''}>path</option>
+                            </select>
+                            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
+                                <input type="checkbox" class="param-array-checkbox" ${param.is_array ? 'checked' : ''}>
+                                数组
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
+                                <input type="checkbox" class="param-required-checkbox" ${param.required ? 'checked' : ''}>
+                                必填
+                            </label>
+                            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('') || ''}
+            </div>
+            <button type="button" class="btn btn-secondary mt-2" onclick="addEditParamRow()">
+                <i class="fas fa-plus"></i> 添加参数
+            </button>
+        </div>
+    `, async () => {
+        const name = document.getElementById('edit-interface-name').value;
+        const description = document.getElementById('edit-interface-description').value;
+        const method = document.getElementById('edit-interface-method').value;
+        const protocol = document.getElementById('edit-interface-protocol').value;
+        const url = document.getElementById('edit-interface-url').value;
+        const auth_type = document.getElementById('edit-interface-auth').value;
+        
+        if (!name || !url) {
+            showToast('请填写必填字段', 'error');
+            return;
+        }
+        
+        const parameters = [];
+        document.querySelectorAll('#edit-params-container .param-row').forEach(row => {
+            const paramName = row.querySelector('.param-name-input').value;
+            const paramType = row.querySelector('.param-type-select').value;
+            const paramRef = row.querySelector('.param-ref-input')?.value;
+            const paramLocation = row.querySelector('.param-location-select').value;
+            const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
+            const paramRequired = row.querySelector('.param-required-checkbox').checked;
+            
+            if (paramName) {
+                const param = {
+                    name: paramName,
+                    type: paramType,
+                    location: paramLocation,
+                    is_array: paramIsArray,
+                    required: paramRequired
+                };
+                
+                // 如果是自定义类型，添加引用
+                if (paramType === 'custom' && paramRef) {
+                    param.ref = parseInt(paramRef);
+                }
+                
+                parameters.push(param);
+            }
+        });
+        
+        try {
+            await apiRequest(`/interfaces/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    name,
+                    description,
+                    method,
+                    protocol,
+                    url,
+                    auth_type,
+                    parameters
+                })
+            });
+            showToast('接口更新成功', 'success');
+            loadInterfaces();
+        } catch (error) {
+            showToast('更新失败: ' + error.message, 'error');
+        }
+    });
 }
 
 async function deleteInterface(id) {

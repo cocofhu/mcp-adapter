@@ -5,6 +5,8 @@ import (
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // ========== Request/Response 结构体 ==========
@@ -120,6 +122,110 @@ func toCustomTypeDTO(m models.CustomType, fields []models.CustomTypeField) Custo
 	}
 }
 
+// ========== 循环引用检测 ==========
+
+// checkCustomTypeCycle 检测自定义类型是否存在循环引用
+// typeID: 当前要创建/更新的类型ID (如果是创建则为0)
+// newFields: 新的字段列表(包含引用关系)
+func checkCustomTypeCycle(db *gorm.DB, typeID int64, appID int64, newFields []CreateCustomTypeFieldReq) error {
+	// 构建引用图: typeID -> []refTypeID
+	graph := make(map[int64][]int64)
+	
+	// 获取应用下所有现有的自定义类型及其字段
+	var existingTypes []models.CustomType
+	db.Where("app_id = ?", appID).Find(&existingTypes)
+	
+	typeIDSet := make(map[int64]bool)
+	for _, t := range existingTypes {
+		typeIDSet[t.ID] = true
+		graph[t.ID] = []int64{}
+	}
+	
+	// 如果是创建新类型,添加到集合中
+	if typeID == 0 {
+		// 使用临时ID表示新类型
+		typeID = -1
+		typeIDSet[typeID] = true
+		graph[typeID] = []int64{}
+	}
+	
+	// 获取所有现有字段的引用关系
+	var existingFields []models.CustomTypeField
+	for tid := range typeIDSet {
+		if tid > 0 { // 跳过临时ID
+			var fields []models.CustomTypeField
+			db.Where("custom_type_id = ?", tid).Find(&fields)
+			existingFields = append(existingFields, fields...)
+		}
+	}
+	
+	// 构建现有的引用关系
+	for _, field := range existingFields {
+		if field.Type == "custom" && field.Ref != nil {
+			// 如果当前更新的类型,跳过其旧字段(稍后会用新字段替换)
+			if typeID > 0 && field.CustomTypeID == typeID {
+				continue
+			}
+			graph[field.CustomTypeID] = append(graph[field.CustomTypeID], *field.Ref)
+		}
+	}
+	
+	// 添加新字段的引用关系
+	for _, field := range newFields {
+		if field.Type == "custom" && field.Ref != nil {
+			graph[typeID] = append(graph[typeID], *field.Ref)
+		}
+	}
+	
+	// DFS 检测环
+	visited := make(map[int64]bool)
+	recStack := make(map[int64]bool)
+	
+	var dfs func(int64) bool
+	dfs = func(node int64) bool {
+		visited[node] = true
+		recStack[node] = true
+		
+		for _, neighbor := range graph[node] {
+			if !visited[neighbor] {
+				if dfs(neighbor) {
+					return true
+				}
+			} else if recStack[neighbor] {
+				// 发现环
+				return true
+			}
+		}
+		
+		recStack[node] = false
+		return false
+	}
+	
+	// 从当前类型开始检测
+	if dfs(typeID) {
+		return errors.New("circular reference detected in custom type fields")
+	}
+	
+	return nil
+}
+
+// checkCustomTypeCycleForUpdate 检测更新时的循环引用
+func checkCustomTypeCycleForUpdate(db *gorm.DB, typeID int64, appID int64, newFields []UpdateCustomTypeFieldReq) error {
+	// 转换为 CreateCustomTypeFieldReq 格式
+	createFields := make([]CreateCustomTypeFieldReq, len(newFields))
+	for i, f := range newFields {
+		createFields[i] = CreateCustomTypeFieldReq{
+			Name:        f.Name,
+			Type:        f.Type,
+			Ref:         f.Ref,
+			IsArray:     f.IsArray,
+			Required:    f.Required,
+			Description: f.Description,
+		}
+	}
+	return checkCustomTypeCycle(db, typeID, appID, createFields)
+}
+
 // ========== Service 函数 ==========
 
 // CreateCustomType 创建自定义类型（包含字段）
@@ -155,6 +261,11 @@ func CreateCustomType(req CreateCustomTypeRequest) (CustomTypeResponse, error) {
 				return CustomTypeResponse{}, errors.New("field reference must belong to the same application")
 			}
 		}
+	}
+
+	// 检测循环引用
+	if err := checkCustomTypeCycle(db, 0, req.AppID, req.Fields); err != nil {
+		return CustomTypeResponse{}, err
 	}
 
 	// 创建自定义类型
@@ -316,6 +427,12 @@ func UpdateCustomType(req UpdateCustomTypeRequest) (CustomTypeResponse, error) {
 					return CustomTypeResponse{}, errors.New("field reference must belong to the same application")
 				}
 			}
+		}
+
+		// 检测循环引用
+		if err := checkCustomTypeCycleForUpdate(tx, existing.ID, existing.AppID, *req.Fields); err != nil {
+			tx.Rollback()
+			return CustomTypeResponse{}, err
 		}
 
 		// 删除旧字段
