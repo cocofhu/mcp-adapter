@@ -41,19 +41,31 @@ type Interface struct {
 	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
+// CustomType 自定义类型实体
+type CustomType struct {
+	ID          int64          `json:"id" gorm:"primaryKey"`                               //类型ID
+	AppID       int64          `json:"app_id" gorm:"not null;index" validate:"required"`   // 应用ID 一个应用对应多个CustomType
+	Name        string         `json:"name" validate:"required"`                           // 类型名称
+	Type        string         `json:"type" validate:"oneof=number string boolean custom"` // 类型 custom表示复杂类型
+	Description string         `json:"description" gorm:"size:16384"`                      // 类型说明 该参数会传入LLM
+	IsArray     bool           `json:"isArray"`                                            // 是否是数组
+	Required    bool           `json:"required"`                                           // 是否必须参数
+	Ref         *int64         `json:"ref"`                                                // 如果是复杂类型, 则引用CustomType.ID
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
 type ToolParameter struct {
-	Name        string  `json:"name" validate:"required"`
-	Type        string  `json:"type" validate:"oneof=sse streamable"`
-	Required    bool    `json:"required"`
-	Location    string  `json:"location" validate:"oneof=query header body"`
-	Description string  `json:"description"`
-	Value       *string `json:"value"`
+	Name     string     `json:"name" validate:"required"`
+	Type     CustomType `json:"type"`
+	Location string     `json:"location" validate:"oneof=query header body"`
+	Value    *string    `json:"value"`
 }
 type ToolOptions struct {
-	Method            string          `json:"method" validate:"oneof=GET POST PUT PATCH DELETE PATCH"`
+	Method            string          `json:"method" validate:"oneof=GET POST PUT PATCH DELETE"`
 	Parameters        []ToolParameter `json:"parameters"`
 	DefaultParameters []ToolParameter `json:"defaultParams"`
-	DefaultHeaders    []ToolParameter `json:"defaultHeaders"`
 }
 
 func (iface *Interface) GetToolOptions() (ToolOptions, error) {
