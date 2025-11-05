@@ -571,6 +571,74 @@ body {
     gap: 8px;
 }
 
+/* ========== 字段行（表单中） ========== */
+.field-row,
+.param-row {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.field-row .form-row,
+.param-row .form-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.field-row input[type="text"],
+.field-row select,
+.param-row input[type="text"],
+.param-row select {
+    flex: 1;
+    min-width: 0;
+}
+
+.field-row .field-name-input,
+.param-row .param-name-input {
+    flex: 2;
+}
+
+.field-row .field-type-select,
+.field-row .field-location-select,
+.param-row .param-type-select,
+.param-row .param-location-select {
+    flex: 1;
+}
+
+.field-row .field-desc-input,
+.param-row .field-desc-input {
+    width: 100%;
+    margin-top: 8px;
+}
+
+/* 删除按钮 - 小巧版本 */
+.btn-remove {
+    padding: 4px 8px !important;
+    font-size: 12px !important;
+    min-width: 28px;
+    height: 28px;
+    border-radius: 6px !important;
+    background: var(--danger-color) !important;
+    color: white !important;
+    border: none;
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-remove:hover {
+    background: #dc2626 !important;
+    transform: scale(1.05);
+}
+
+.btn-remove i {
+    font-size: 12px;
+}
+
 /* ========== 提示框 ========== */
 .alert {
     padding: 16px;

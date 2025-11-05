@@ -459,15 +459,15 @@ function addFieldRow() {
                 <option value="number">number</option>
                 <option value="boolean">boolean</option>
             </select>
-            <label style="display: flex; align-items: center; gap: 4px;">
+            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                 <input type="checkbox" class="field-required-checkbox">
                 必填
             </label>
-            <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove()">
+            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
                 <i class="fas fa-times"></i>
             </button>
         </div>
-        <input type="text" class="field-desc-input mt-1" placeholder="字段描述（可选）">
+        <input type="text" class="field-desc-input" placeholder="字段描述（可选）">
     `;
     container.appendChild(row);
 }
@@ -526,15 +526,15 @@ function editCustomType(id) {
                                 <option value="number" ${field.type === 'number' ? 'selected' : ''}>number</option>
                                 <option value="boolean" ${field.type === 'boolean' ? 'selected' : ''}>boolean</option>
                             </select>
-                            <label style="display: flex; align-items: center; gap: 4px;">
+                            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                                 <input type="checkbox" class="field-required-checkbox" ${field.required ? 'checked' : ''}>
                                 必填
                             </label>
-                            <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove()">
+                            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
-                        <input type="text" class="field-desc-input mt-1" value="${field.description || ''}" placeholder="字段描述（可选）">
+                        <input type="text" class="field-desc-input" value="${field.description || ''}" placeholder="字段描述（可选）">
                     </div>
                 `).join('') || ''}
             </div>
@@ -588,15 +588,15 @@ function addEditFieldRow() {
                 <option value="number">number</option>
                 <option value="boolean">boolean</option>
             </select>
-            <label style="display: flex; align-items: center; gap: 4px;">
+            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                 <input type="checkbox" class="field-required-checkbox">
                 必填
             </label>
-            <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove()">
+            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
                 <i class="fas fa-times"></i>
             </button>
         </div>
-        <input type="text" class="field-desc-input mt-1" placeholder="字段描述（可选）">
+        <input type="text" class="field-desc-input" placeholder="字段描述（可选）">
     `;
     container.appendChild(row);
 }
@@ -821,11 +821,11 @@ function addParamRow() {
                 <option value="body">body</option>
                 <option value="path">path</option>
             </select>
-            <label style="display: flex; align-items: center; gap: 4px;">
+            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                 <input type="checkbox" class="param-required-checkbox">
                 必填
             </label>
-            <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove()">
+            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
                 <i class="fas fa-times"></i>
             </button>
         </div>
