@@ -42,11 +42,12 @@ type Interface struct {
 }
 
 type ToolParameter struct {
-	Name        string `json:"name" validate:"required"`
-	Type        string `json:"type" validate:"oneof=sse streamable"`
-	Required    bool   `json:"required"`
-	Location    string `json:"location" validate:"oneof=query header body"`
-	Description string `json:"description"`
+	Name        string  `json:"name" validate:"required"`
+	Type        string  `json:"type" validate:"oneof=sse streamable"`
+	Required    bool    `json:"required"`
+	Location    string  `json:"location" validate:"oneof=query header body"`
+	Description string  `json:"description"`
+	Value       *string `json:"value"`
 }
 type ToolOptions struct {
 	Method            string          `json:"method" validate:"oneof=GET POST PUT PATCH DELETE PATCH"`

@@ -19,7 +19,7 @@ class MCPAdapterApp {
 
     async init() {
         await this.loadApplications();
-        await this.loadInterfaces();
+        // 不再在初始化时加载所有接口，因为后端要求必须指定 app_id
         this.bindEvents();
         this.renderApplications();
         this.updateAppSelectors();
@@ -63,31 +63,65 @@ class MCPAdapterApp {
             const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
             
             if (!response.ok) {
-                // 根据状态码提供更友好的错误信息
+                // 尝试解析后端返回的错误消息
                 let errorMessage = `请求失败 (${response.status})`;
-                switch (response.status) {
-                    case 400:
-                        errorMessage = '请求参数错误';
-                        break;
-                    case 401:
-                        errorMessage = '未授权访问';
-                        break;
-                    case 403:
-                        errorMessage = '访问被拒绝';
-                        break;
-                    case 404:
-                        errorMessage = '请求的资源不存在';
-                        break;
-                    case 409:
-                        errorMessage = '资源冲突，可能已存在相同名称的项目';
-                        break;
-                    case 500:
-                        errorMessage = '服务器内部错误';
-                        break;
-                    case 503:
-                        errorMessage = '服务暂时不可用';
-                        break;
+                
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        // 后端返回 JSON 格式的错误
+                        const errorData = await response.json();
+                        
+                        // 处理不同的 JSON 格式
+                        if (typeof errorData === 'string') {
+                            // 后端直接返回字符串（如 c.JSON(status, err.Error())）
+                            errorMessage = errorData;
+                        } else if (typeof errorData === 'object') {
+                            // 后端返回对象，尝试从不同的字段获取错误消息
+                            errorMessage = errorData.message || errorData.error || errorData.msg || 
+                                         errorData.detail || JSON.stringify(errorData);
+                        }
+                    } else if (contentType && contentType.includes('text/plain')) {
+                        // 后端返回文本格式的错误（如 c.String()）
+                        const errorText = await response.text();
+                        if (errorText && errorText.trim()) {
+                            errorMessage = errorText;
+                        }
+                    } else {
+                        // 尝试作为文本读取
+                        const errorText = await response.text();
+                        if (errorText && errorText.trim()) {
+                            errorMessage = errorText;
+                        }
+                    }
+                } catch (parseError) {
+                    // 如果解析失败，使用默认的状态码错误消息
+                    console.warn('Failed to parse error response:', parseError);
+                    switch (response.status) {
+                        case 400:
+                            errorMessage = '请求参数错误';
+                            break;
+                        case 401:
+                            errorMessage = '未授权访问';
+                            break;
+                        case 403:
+                            errorMessage = '访问被拒绝';
+                            break;
+                        case 404:
+                            errorMessage = '请求的资源不存在';
+                            break;
+                        case 409:
+                            errorMessage = '资源冲突，可能已存在相同名称的项目';
+                            break;
+                        case 500:
+                            errorMessage = '服务器内部错误';
+                            break;
+                        case 503:
+                            errorMessage = '服务暂时不可用';
+                            break;
+                    }
                 }
+                
                 throw new Error(errorMessage);
             }
 
@@ -126,7 +160,12 @@ class MCPAdapterApp {
     // 加载接口数据
     async loadInterfaces(appId = null) {
         try {
-            const endpoint = appId ? `/interfaces?app_id=${appId}` : '/interfaces';
+            // 后端要求必须提供 app_id，如果没有则不加载
+            if (!appId) {
+                this.interfaces = [];
+                return;
+            }
+            const endpoint = `/interfaces?app_id=${appId}`;
             this.interfaces = await this.apiCall(endpoint);
         } catch (error) {
             console.error('Failed to load interfaces:', error);
@@ -187,7 +226,12 @@ class MCPAdapterApp {
         try {
             await this.apiCall(`/applications/${id}`, 'DELETE');
             await this.loadApplications();
-            await this.loadInterfaces(); // 重新加载接口，因为关联接口可能被删除
+            // 如果删除的是当前选中的应用，清空接口列表
+            if (this.currentAppId == id) {
+                this.currentAppId = null;
+                this.interfaces = [];
+                this.renderInterfaces();
+            }
             this.renderApplications();
             this.updateAppSelectors();
             this.showNotification('应用删除成功', 'success');
@@ -204,21 +248,24 @@ class MCPAdapterApp {
                 app_id: parseInt(interfaceData.appId),
                 name: interfaceData.name,
                 description: interfaceData.description || '',
-                protocol: interfaceData.protocol || 'HTTP',
+                protocol: interfaceData.protocol || 'http',
                 url: interfaceData.url,
                 auth_type: interfaceData.authType || 'none',
                 enabled: interfaceData.enabled !== false,
                 post_process: interfaceData.postProcess || '',
-                options: JSON.stringify({
+                options: {
                     method: interfaceData.method || 'GET',
                     parameters: interfaceData.parameters || [],
                     defaultParams: interfaceData.defaultParams || [],
                     defaultHeaders: interfaceData.defaultHeaders || []
-                })
+                }
             });
             
-            await this.loadInterfaces();
-            this.renderInterfaces();
+            // 重新加载当前应用的接口
+            if (this.currentAppId) {
+                await this.loadInterfaces(this.currentAppId);
+                this.renderInterfaces();
+            }
             this.showNotification('接口创建成功', 'success');
             return newInterface;
         } catch (error) {
@@ -231,24 +278,26 @@ class MCPAdapterApp {
     async updateInterface(id, interfaceData) {
         try {
             const updatedInterface = await this.apiCall(`/interfaces/${id}`, 'PUT', {
-                app_id: parseInt(interfaceData.appId),
                 name: interfaceData.name,
                 description: interfaceData.description || '',
-                protocol: interfaceData.protocol || 'HTTP',
+                protocol: interfaceData.protocol || 'http',
                 url: interfaceData.url,
                 auth_type: interfaceData.authType || 'none',
                 enabled: interfaceData.enabled !== false,
                 post_process: interfaceData.postProcess || '',
-                options: JSON.stringify({
+                options: {
                     method: interfaceData.method || 'GET',
                     parameters: interfaceData.parameters || [],
                     defaultParams: interfaceData.defaultParams || [],
                     defaultHeaders: interfaceData.defaultHeaders || []
-                })
+                }
             });
             
-            await this.loadInterfaces();
-            this.renderInterfaces();
+            // 重新加载当前应用的接口
+            if (this.currentAppId) {
+                await this.loadInterfaces(this.currentAppId);
+                this.renderInterfaces();
+            }
             this.showNotification('接口更新成功', 'success');
             return updatedInterface;
         } catch (error) {
@@ -261,7 +310,10 @@ class MCPAdapterApp {
     async deleteInterface(id) {
         try {
             await this.apiCall(`/interfaces/${id}`, 'DELETE');
-            await this.loadInterfaces();
+            // 重新加载当前应用的接口
+            if (this.currentAppId) {
+                await this.loadInterfaces(this.currentAppId);
+            }
             this.renderInterfaces();
             this.showNotification('接口删除成功', 'success');
         } catch (error) {
@@ -489,9 +541,9 @@ class MCPAdapterApp {
         // 应用选择器变化
         const currentAppSelect = document.getElementById('current-app-select');
         if (currentAppSelect) {
-            currentAppSelect.addEventListener('change', (e) => {
+            currentAppSelect.addEventListener('change', async (e) => {
                 this.currentAppId = e.target.value;
-                this.loadInterfaces(this.currentAppId);
+                await this.loadInterfaces(this.currentAppId);
                 this.renderInterfaces();
             });
         }
@@ -638,11 +690,16 @@ class MCPAdapterApp {
             this.renderInterfaces();
         } else if (tabName === 'applications') {
             this.renderApplications();
+        } else if (tabName === 'add-interface') {
+            // 切换到添加接口页面时，确保应用选择器是启用的（可能之前在编辑时被禁用）
+            if (this.editingInterfaceId === null) {
+                this.setAppSelectorState(false, false);
+            }
         }
     }
 
     // 渲染应用列表
-    renderApplications() {
+    async renderApplications() {
         const container = document.getElementById('applications-grid');
         if (!container) return;
 
@@ -664,6 +721,7 @@ class MCPAdapterApp {
             return;
         }
 
+        // 先渲染基本内容，接口数量显示为加载中
         container.innerHTML = filteredApps.map(app => `
             <div class="application-card" data-app-id="${app.id}">
                 <div class="app-header">
@@ -686,7 +744,7 @@ class MCPAdapterApp {
                 <div class="app-stats">
                     <div class="stat-item">
                         <i class="fas fa-list"></i>
-                        <span>接口数量: ${this.getInterfaceCountForApp(app.id)}</span>
+                        <span class="interface-count-${app.id}">接口数量: <i class="fas fa-spinner fa-spin"></i></span>
                     </div>
                     <div class="stat-item">
                         <i class="fas fa-route"></i>
@@ -708,11 +766,26 @@ class MCPAdapterApp {
                 </div>
             </div>
         `).join('');
+
+        // 异步加载每个应用的接口数量
+        filteredApps.forEach(async (application) => {
+            const count = await this.getInterfaceCountForApp(application.id);
+            const countElement = container.querySelector(`.interface-count-${application.id}`);
+            if (countElement) {
+                countElement.textContent = `接口数量: ${count}`;
+            }
+        });
     }
 
     // 获取应用的接口数量
-    getInterfaceCountForApp(appId) {
-        return this.interfaces.filter(iface => iface.app_id === appId).length;
+    async getInterfaceCountForApp(appId) {
+        try {
+            const response = await this.apiCall(`/interfaces?app_id=${appId}`);
+            return response.length;
+        } catch (error) {
+            console.error('Failed to get interface count:', error);
+            return 0;
+        }
     }
 
     // 获取协议显示名称
@@ -726,13 +799,13 @@ class MCPAdapterApp {
     }
 
     // 查看应用的接口
-    viewAppInterfaces(appId) {
+    async viewAppInterfaces(appId) {
         this.currentAppId = appId;
         const appSelect = document.getElementById('current-app-select');
         if (appSelect) {
             appSelect.value = appId;
         }
-        this.loadInterfaces(appId);
+        await this.loadInterfaces(appId);
         this.switchTab('interfaces');
     }
 
@@ -740,6 +813,18 @@ class MCPAdapterApp {
     renderInterfaces() {
         const container = document.getElementById('interfaces-grid');
         if (!container) return;
+
+        // 如果没有选择应用，显示提示
+        if (!this.currentAppId) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-folder-open"></i>
+                    <h3>请先选择应用</h3>
+                    <p>请在上方选择一个应用以查看其接口列表</p>
+                </div>
+            `;
+            return;
+        }
 
         const searchTerm = document.getElementById('search-input')?.value.toLowerCase() || '';
         const protocolFilter = document.getElementById('protocol-filter')?.value || '';
@@ -781,7 +866,8 @@ class MCPAdapterApp {
 
         container.innerHTML = filteredInterfaces.map(iface => {
             const app = this.applications.find(a => a.id === iface.app_id);
-            const options = iface.options ? JSON.parse(iface.options) : {};
+            // 后端现在直接返回对象，不需要 JSON.parse
+            const options = iface.options || {};
             
             return `
                 <div class="interface-card" data-interface-id="${iface.id}">
@@ -1097,6 +1183,9 @@ class MCPAdapterApp {
                     document.getElementById('add-interface-form').reset();
                     this.clearParameters();
                     
+                    // 重新启用应用选择器
+                    this.setAppSelectorState(false, false);
+                    
                     // 切换到接口列表
                     this.switchTab('interfaces');
                     
@@ -1193,22 +1282,36 @@ class MCPAdapterApp {
     }
 
     // 编辑接口
-    editInterface(id) {
-        const iface = this.interfaces.find(i => i.id === id);
-        if (!iface) return;
+    async editInterface(id) {
+        // 先尝试从当前加载的接口中查找
+        let iface = this.interfaces.find(i => i.id === id);
+        
+        // 如果找不到，从后端获取
+        if (!iface) {
+            try {
+                const response = await this.apiCall(`/interfaces/${id}`);
+                iface = response;
+            } catch (error) {
+                this.showNotification('无法加载接口信息', 'error');
+                return;
+            }
+        }
 
         this.editingInterfaceId = id;
         
         // 填充基本信息
         document.getElementById('interface-app-id').value = iface.app_id;
+        // 编辑时禁用应用选择器，不允许修改所属应用
+        this.setAppSelectorState(true, true);
+        
         document.getElementById('interface-name').value = iface.name;
         document.getElementById('interface-description').value = iface.description || '';
         document.getElementById('protocol-type').value = iface.protocol;
         document.getElementById('endpoint-url').value = iface.url;
         document.getElementById('auth-type').value = iface.auth_type || 'none';
 
-        // 解析选项
-        const options = iface.options ? JSON.parse(iface.options) : {};
+        // 后端现在直接返回对象，不需要 JSON.parse
+        const options = iface.options || {};
         document.getElementById('http-method').value = options.method || 'GET';
 
         // 填充参数
@@ -1232,8 +1335,19 @@ class MCPAdapterApp {
 
     // 删除接口确认
     async deleteInterfaceConfirm(id) {
-        const iface = this.interfaces.find(i => i.id === id);
-        if (!iface) return;
+        // 先尝试从当前加载的接口中查找
+        let iface = this.interfaces.find(i => i.id === id);
+        
+        // 如果找不到，从后端获取
+        if (!iface) {
+            try {
+                const response = await this.apiCall(`/interfaces/${id}`);
+                iface = response;
+            } catch (error) {
+                this.showNotification('无法加载接口信息', 'error');
+                return;
+            }
+        }
 
         const lockKey = `delete-interface-${id}`;
         
@@ -1532,6 +1646,38 @@ class MCPAdapterApp {
         } else {
             locationConfig.style.display = 'none';
             paramInfo.innerHTML = '<small>参数位置将根据协议类型自动确定</small>';
+        }
+    }
+
+    // 设置应用选择器状态
+    setAppSelectorState(disabled, showHint = false) {
+        const appIdSelect = document.getElementById('interface-app-id');
+        if (!appIdSelect) return;
+
+        appIdSelect.disabled = disabled;
+        
+        const appFormGroup = appIdSelect.closest('.form-group');
+        if (!appFormGroup) return;
+
+        let disabledHint = appFormGroup.querySelector('.disabled-hint');
+        
+        if (disabled && showHint) {
+            // 添加禁用提示
+            if (!disabledHint) {
+                disabledHint = document.createElement('small');
+                disabledHint.className = 'disabled-hint';
+                disabledHint.style.color = '#666';
+                disabledHint.style.fontSize = '12px';
+                disabledHint.style.marginTop = '4px';
+                disabledHint.style.display = 'block';
+                disabledHint.textContent = '编辑时不能修改所属应用';
+                appFormGroup.appendChild(disabledHint);
+            }
+        } else {
+            // 移除禁用提示
+            if (disabledHint) {
+                disabledHint.remove();
+            }
         }
     }
 }

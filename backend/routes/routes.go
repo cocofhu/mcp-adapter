@@ -44,8 +44,8 @@ func SetupRoutes() *gin.Engine {
 	})
 
 	// MCP-SSE服务
-	r.GET("/sse/:path", handlers.ServeSSE)
-	r.GET("/message/:path", handlers.ServeSSE)
+	r.Any("/sse/:path", handlers.ServeSSE)
+	r.Any("/message/:path", handlers.ServeSSE)
 
 	log.Println("Routes initialized with Gin")
 	return r

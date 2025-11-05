@@ -46,7 +46,6 @@ func GetInterface(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid interface ID")
 		return
 	}
-
 	resp, err := service.GetInterface(service.GetInterfaceRequest{ID: id})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, err.Error())
@@ -62,14 +61,12 @@ func UpdateInterface(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid interface ID")
 		return
 	}
-
 	var body service.UpdateInterfaceRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.String(http.StatusBadRequest, "Invalid JSON format")
 		return
 	}
 	body.ID = id
-
 	resp, err := service.UpdateInterface(body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, err.Error())

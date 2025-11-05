@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mcp-adapter/backend/models"
 	"net/http"
 	"net/url"
@@ -177,7 +178,7 @@ func BuildHTTPRequest(ctx context.Context, iface *models.Interface, args map[str
 			req.Header.Add(k, v)
 		}
 	}
-
+	log.Printf("%+v", req)
 	return req, nil
 }
 

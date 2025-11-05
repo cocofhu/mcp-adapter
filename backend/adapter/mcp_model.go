@@ -142,7 +142,6 @@ func addTool(iface *models.Interface, app *models.Application) {
 		newTool := mcp.NewTool(iface.Name, options...)
 
 		s.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-
 			args := req.GetArguments()
 
 			data, code, err := CallHTTPInterface(ctx, iface, args)
