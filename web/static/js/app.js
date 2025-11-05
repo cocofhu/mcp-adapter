@@ -138,18 +138,29 @@ async function loadApplications() {
 function renderApplications(apps) {
     const grid = document.getElementById('applications-grid');
     
-    if (!apps || apps.length === 0) {
+    // 获取搜索关键词
+    const searchTerm = document.getElementById('app-search')?.value.toLowerCase() || '';
+    
+    // 过滤应用
+    const filteredApps = apps.filter(app => {
+        if (!searchTerm) return true;
+        return app.name.toLowerCase().includes(searchTerm) ||
+               (app.description && app.description.toLowerCase().includes(searchTerm)) ||
+               (app.path && app.path.toLowerCase().includes(searchTerm));
+    });
+    
+    if (!filteredApps || filteredApps.length === 0) {
         grid.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-folder-open"></i>
-                <h3>还没有应用</h3>
-                <p>点击"创建应用"开始</p>
+                <h3>${searchTerm ? '未找到匹配的应用' : '还没有应用'}</h3>
+                <p>${searchTerm ? '尝试其他搜索关键词' : '点击"创建应用"开始'}</p>
             </div>
         `;
         return;
     }
     
-    grid.innerHTML = apps.map(app => `
+    grid.innerHTML = filteredApps.map(app => `
         <div class="card" onclick="viewApplication(${app.id})">
             <div class="card-header">
                 <div>
@@ -180,6 +191,11 @@ function renderApplications(apps) {
         </div>
     `).join('');
 }
+
+// 应用搜索事件监听
+document.getElementById('app-search')?.addEventListener('input', () => {
+    renderApplications(state.applications);
+});
 
 function updateAppSelectors(apps) {
     const selectors = [document.getElementById('global-app-select')];
@@ -337,18 +353,28 @@ async function loadCustomTypes() {
 function renderCustomTypes(types) {
     const grid = document.getElementById('types-grid');
     
-    if (!types || types.length === 0) {
+    // 获取搜索关键词
+    const searchTerm = document.getElementById('type-search')?.value.toLowerCase() || '';
+    
+    // 过滤类型
+    const filteredTypes = types.filter(type => {
+        if (!searchTerm) return true;
+        return type.name.toLowerCase().includes(searchTerm) ||
+               (type.description && type.description.toLowerCase().includes(searchTerm));
+    });
+    
+    if (!filteredTypes || filteredTypes.length === 0) {
         grid.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-shapes"></i>
-                <h3>还没有自定义类型</h3>
-                <p>点击"创建类型"开始</p>
+                <h3>${searchTerm ? '未找到匹配的类型' : '还没有自定义类型'}</h3>
+                <p>${searchTerm ? '尝试其他搜索关键词' : '点击"创建类型"开始'}</p>
             </div>
         `;
         return;
     }
     
-    grid.innerHTML = types.map(type => `
+    grid.innerHTML = filteredTypes.map(type => `
         <div class="card" onclick="viewCustomType(${type.id})">
             <div class="card-header">
                 <div>
@@ -389,6 +415,11 @@ function renderCustomTypes(types) {
         </div>
     `).join('');
 }
+
+// 类型搜索事件监听
+document.getElementById('type-search')?.addEventListener('input', () => {
+    renderCustomTypes(state.customTypes);
+});
 
 // 创建自定义类型
 document.getElementById('create-type-btn').addEventListener('click', () => {
@@ -746,18 +777,34 @@ async function loadInterfaces() {
 function renderInterfaces(interfaces) {
     const grid = document.getElementById('interfaces-grid');
     
-    if (!interfaces || interfaces.length === 0) {
+    // 获取搜索关键词和过滤条件
+    const searchTerm = document.getElementById('interface-search')?.value.toLowerCase() || '';
+    const methodFilter = document.getElementById('method-filter')?.value || '';
+    
+    // 过滤接口
+    const filteredInterfaces = interfaces.filter(iface => {
+        const matchesSearch = !searchTerm || 
+            iface.name.toLowerCase().includes(searchTerm) ||
+            (iface.description && iface.description.toLowerCase().includes(searchTerm)) ||
+            (iface.url && iface.url.toLowerCase().includes(searchTerm));
+        
+        const matchesMethod = !methodFilter || iface.method === methodFilter;
+        
+        return matchesSearch && matchesMethod;
+    });
+    
+    if (!filteredInterfaces || filteredInterfaces.length === 0) {
         grid.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-plug"></i>
-                <h3>还没有接口</h3>
-                <p>点击"创建接口"开始</p>
+                <h3>${searchTerm || methodFilter ? '未找到匹配的接口' : '还没有接口'}</h3>
+                <p>${searchTerm || methodFilter ? '尝试其他搜索条件' : '点击"创建接口"开始'}</p>
             </div>
         `;
         return;
     }
     
-    grid.innerHTML = interfaces.map(iface => `
+    grid.innerHTML = filteredInterfaces.map(iface => `
         <div class="card" onclick="viewInterface(${iface.id})">
             <div class="card-header">
                 <div>
@@ -792,6 +839,15 @@ function renderInterfaces(interfaces) {
         </div>
     `).join('');
 }
+
+// 接口搜索和过滤事件监听
+document.getElementById('interface-search')?.addEventListener('input', () => {
+    renderInterfaces(state.interfaces);
+});
+
+document.getElementById('method-filter')?.addEventListener('change', () => {
+    renderInterfaces(state.interfaces);
+});
 
 function getMethodColor(method) {
     const colors = {

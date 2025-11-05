@@ -297,6 +297,11 @@ body {
     color: var(--danger-color);
 }
 
+.badge-info {
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--info-color);
+}
+
 .card-body {
     margin-bottom: 16px;
 }
@@ -768,12 +773,28 @@ body {
     font-size: 20px;
     margin-bottom: 16px;
     color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .doc-section h3 {
     font-size: 16px;
-    margin: 16px 0 8px;
+    margin: 20px 0 12px;
     color: var(--text-primary);
+    font-weight: 600;
+}
+
+.doc-section h4 {
+    font-size: 14px;
+    margin: 12px 0 8px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.doc-section p {
+    margin-bottom: 12px;
+    line-height: 1.6;
 }
 
 .doc-section pre {
@@ -784,11 +805,20 @@ body {
     overflow-x: auto;
     font-size: 13px;
     line-height: 1.5;
+    margin: 12px 0;
 }
 
 .doc-section code {
     font-family: 'Courier New', monospace;
-    color: var(--primary-color);
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.doc-section pre code {
+    background: transparent;
+    padding: 0;
 }
 
 .doc-section ul,
@@ -799,6 +829,29 @@ body {
 
 .doc-section li {
     margin-bottom: 8px;
+}
+
+.doc-section strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* API 文档徽章样式 */
+.doc-section .badge-primary,
+.doc-section .badge-success,
+.doc-section .badge-warning,
+.doc-section .badge-danger {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 8px;
+}
+
+.doc-section .text-muted {
+    color: var(--text-muted);
+    font-size: 13px;
 }
 
 /* ========== 空状态 ========== */
