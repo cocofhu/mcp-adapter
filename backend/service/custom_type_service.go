@@ -9,22 +9,20 @@ import (
 	"gorm.io/gorm"
 )
 
-// ========== Request/Response 结构体 ==========
-
 type CreateCustomTypeRequest struct {
-	AppID       int64                      `json:"app_id" validate:"required,gt=0"`
-	Name        string                     `json:"name" validate:"required,max=255"`
-	Description string                     `json:"description" validate:"max=16384"`
-	Fields      []CreateCustomTypeFieldReq `json:"fields"` // 字段列表
+	AppID       int64                      `json:"app_id" validate:"required,gt=0"`  // 所属应用 ID
+	Name        string                     `json:"name" validate:"required,max=255"` // 类型名称
+	Description string                     `json:"description" validate:"max=16384"` // 类型描述
+	Fields      []CreateCustomTypeFieldReq `json:"fields"`                           // 字段列表
 }
 
 type CreateCustomTypeFieldReq struct {
-	Name        string `json:"name" validate:"required,max=255"`
-	Type        string `json:"type" validate:"required,oneof=number string boolean custom"`
-	Ref         *int64 `json:"ref"`         // 如果 type=custom，引用其他 CustomType.ID
-	IsArray     bool   `json:"is_array"`    // 是否数组
-	Required    bool   `json:"required"`    // 是否必填
-	Description string `json:"description" validate:"max=16384"`
+	Name        string `json:"name" validate:"required,max=255"`                            // 字段名称
+	Type        string `json:"type" validate:"required,oneof=number string boolean custom"` // 字段类型
+	Ref         *int64 `json:"ref"`                                                         // 如果 type=custom，引用其他 CustomType.ID
+	IsArray     bool   `json:"is_array"`                                                    // 是否数组
+	Required    bool   `json:"required"`                                                    // 是否必填
+	Description string `json:"description" validate:"max=16384"`                            // 字段描述
 }
 
 type GetCustomTypeRequest struct {
@@ -36,27 +34,25 @@ type ListCustomTypesRequest struct {
 }
 
 type UpdateCustomTypeRequest struct {
-	ID          int64                       `json:"id" validate:"required,gt=0"`
-	Name        *string                     `json:"name,omitempty" validate:"omitempty,max=255"`
-	Description *string                     `json:"description,omitempty" validate:"omitempty,max=16384"`
-	Fields      *[]UpdateCustomTypeFieldReq `json:"fields,omitempty"` // 如果提供，则完全替换字段列表
+	ID          int64                       `json:"id" validate:"required,gt=0"`                          // 要更新的自定义类型 ID
+	Name        *string                     `json:"name,omitempty" validate:"omitempty,max=255"`          // 如果提供，则更新名称
+	Description *string                     `json:"description,omitempty" validate:"omitempty,max=16384"` // 如果提供，则更新描述
+	Fields      *[]UpdateCustomTypeFieldReq `json:"fields,omitempty"`                                     // 如果提供，则完全替换字段列表
 }
 
 type UpdateCustomTypeFieldReq struct {
-	ID          *int64  `json:"id,omitempty"` // 如果有 ID，则更新；否则新建
-	Name        string  `json:"name" validate:"required,max=255"`
-	Type        string  `json:"type" validate:"required,oneof=number string boolean custom"`
-	Ref         *int64  `json:"ref"`
-	IsArray     bool    `json:"is_array"`
-	Required    bool    `json:"required"`
-	Description string  `json:"description" validate:"max=16384"`
+	ID          *int64 `json:"id,omitempty"`                                                // 增加字段的时候没有ID，更新字段时有ID(目前是先删除再增加的逻辑 该参数并未使用) 在修改时候需要清理历史数据
+	Name        string `json:"name" validate:"required,max=255"`                            // 字段名称
+	Type        string `json:"type" validate:"required,oneof=number string boolean custom"` // 字段类型
+	Ref         *int64 `json:"ref"`                                                         // 如果 type=custom，引用其他 CustomType.ID
+	IsArray     bool   `json:"is_array"`                                                    // 是否数组
+	Required    bool   `json:"required"`                                                    // 是否必填
+	Description string `json:"description" validate:"max=16384"`                            // 字段描述
 }
 
 type DeleteCustomTypeRequest struct {
 	ID int64 `json:"id" validate:"required,gt=0"`
 }
-
-// ========== DTO 结构体 ==========
 
 type CustomTypeFieldDTO struct {
 	ID           int64     `json:"id"`
@@ -76,7 +72,7 @@ type CustomTypeDTO struct {
 	AppID       int64                `json:"app_id"`
 	Name        string               `json:"name"`
 	Description string               `json:"description"`
-	Fields      []CustomTypeFieldDTO `json:"fields"` // 包含字段列表
+	Fields      []CustomTypeFieldDTO `json:"fields"`
 	CreatedAt   time.Time            `json:"created_at"`
 	UpdatedAt   time.Time            `json:"updated_at"`
 }
@@ -88,8 +84,6 @@ type CustomTypeResponse struct {
 type CustomTypesResponse struct {
 	CustomTypes []CustomTypeDTO `json:"custom_types"`
 }
-
-// ========== Mapper 函数 ==========
 
 func toCustomTypeFieldDTO(m models.CustomTypeField) CustomTypeFieldDTO {
 	return CustomTypeFieldDTO{
@@ -122,36 +116,29 @@ func toCustomTypeDTO(m models.CustomType, fields []models.CustomTypeField) Custo
 	}
 }
 
-// ========== 循环引用检测 ==========
-
-// checkCustomTypeCycle 使用拓扑排序(Kahn算法)检测自定义类型是否存在循环引用
-// typeID: 当前要创建/更新的类型ID (如果是创建则为0)
-// newFields: 新的字段列表(包含引用关系)
+// checkCustomTypeCycle 检测自定义类型字段的循环引用 看起来会有并发问题
 func checkCustomTypeCycle(db *gorm.DB, typeID int64, appID int64, newFields []CreateCustomTypeFieldReq) error {
 	// 构建引用图: typeID -> []refTypeID (邻接表)
 	graph := make(map[int64][]int64)
 	// 入度表: typeID -> inDegree
 	inDegree := make(map[int64]int)
-	
 	// 获取应用下所有现有的自定义类型
 	var existingTypes []models.CustomType
 	db.Where("app_id = ?", appID).Find(&existingTypes)
-	
+
 	// 初始化所有节点
 	for _, t := range existingTypes {
 		graph[t.ID] = []int64{}
 		inDegree[t.ID] = 0
 	}
-	
 	// 如果是创建新类型,添加到图中
 	if typeID == 0 {
-		// 使用临时ID表示新类型
-		typeID = -1
+		// 数据库不应该出现ID为0的类型
 		graph[typeID] = []int64{}
 		inDegree[typeID] = 0
 	}
-	
 	// 获取所有现有字段的引用关系
+	// 这里应该可以修改数据库表结构,添加一个AppID字段,批量查询会更高效
 	var existingFields []models.CustomTypeField
 	for tid := range graph {
 		if tid > 0 { // 跳过临时ID
@@ -160,7 +147,6 @@ func checkCustomTypeCycle(db *gorm.DB, typeID int64, appID int64, newFields []Cr
 			existingFields = append(existingFields, fields...)
 		}
 	}
-	
 	// 构建现有的引用关系和入度
 	for _, field := range existingFields {
 		if field.Type == "custom" && field.Ref != nil {
@@ -173,7 +159,6 @@ func checkCustomTypeCycle(db *gorm.DB, typeID int64, appID int64, newFields []Cr
 			inDegree[*field.Ref]++
 		}
 	}
-	
 	// 添加新字段的引用关系和入度
 	for _, field := range newFields {
 		if field.Type == "custom" && field.Ref != nil {
@@ -182,16 +167,14 @@ func checkCustomTypeCycle(db *gorm.DB, typeID int64, appID int64, newFields []Cr
 			inDegree[*field.Ref]++
 		}
 	}
-	
 	// Kahn 算法: 拓扑排序检测环
 	// 1. 找出所有入度为0的节点
-	queue := []int64{}
+	var queue []int64
 	for node := range graph {
 		if inDegree[node] == 0 {
 			queue = append(queue, node)
 		}
 	}
-	
 	// 2. BFS 处理
 	processedCount := 0
 	for len(queue) > 0 {
@@ -199,7 +182,6 @@ func checkCustomTypeCycle(db *gorm.DB, typeID int64, appID int64, newFields []Cr
 		current := queue[0]
 		queue = queue[1:]
 		processedCount++
-		
 		// 遍历所有邻接节点
 		for _, neighbor := range graph[current] {
 			inDegree[neighbor]--
@@ -209,12 +191,10 @@ func checkCustomTypeCycle(db *gorm.DB, typeID int64, appID int64, newFields []Cr
 			}
 		}
 	}
-	
 	// 3. 如果处理的节点数小于总节点数,说明存在环
 	if processedCount < len(graph) {
 		return errors.New("circular reference detected in custom type fields")
 	}
-	
 	return nil
 }
 
@@ -235,29 +215,23 @@ func checkCustomTypeCycleForUpdate(db *gorm.DB, typeID int64, appID int64, newFi
 	return checkCustomTypeCycle(db, typeID, appID, createFields)
 }
 
-// ========== Service 函数 ==========
-
 // CreateCustomType 创建自定义类型（包含字段）
 func CreateCustomType(req CreateCustomTypeRequest) (CustomTypeResponse, error) {
 	if err := validate.Struct(req); err != nil {
 		return CustomTypeResponse{}, err
 	}
-
 	db := database.GetDB()
-
 	// 检查应用是否存在
 	var app models.Application
 	if err := db.First(&app, req.AppID).Error; err != nil {
 		return CustomTypeResponse{}, errors.New("application not found")
 	}
-
 	// 检查类型名称在该应用下是否唯一
 	var count int64
 	db.Model(&models.CustomType{}).Where("app_id = ? AND name = ?", req.AppID, req.Name).Count(&count)
 	if count > 0 {
 		return CustomTypeResponse{}, errors.New("duplicate custom type name in this application")
 	}
-
 	// 验证字段的 Ref 引用是否有效
 	for _, field := range req.Fields {
 		if field.Type == "custom" && field.Ref != nil {
@@ -271,26 +245,22 @@ func CreateCustomType(req CreateCustomTypeRequest) (CustomTypeResponse, error) {
 			}
 		}
 	}
-
 	// 检测循环引用
 	if err := checkCustomTypeCycle(db, 0, req.AppID, req.Fields); err != nil {
 		return CustomTypeResponse{}, err
 	}
-
 	// 创建自定义类型
 	customType := models.CustomType{
 		AppID:       req.AppID,
 		Name:        req.Name,
 		Description: req.Description,
 	}
-
 	// 使用事务
 	tx := db.Begin()
 	if err := tx.Create(&customType).Error; err != nil {
 		tx.Rollback()
 		return CustomTypeResponse{}, err
 	}
-
 	// 创建字段
 	fields := make([]models.CustomTypeField, 0, len(req.Fields))
 	for _, fieldReq := range req.Fields {
@@ -309,9 +279,7 @@ func CreateCustomType(req CreateCustomTypeRequest) (CustomTypeResponse, error) {
 		}
 		fields = append(fields, field)
 	}
-
 	tx.Commit()
-
 	return CustomTypeResponse{CustomType: toCustomTypeDTO(customType, fields)}, nil
 }
 
@@ -320,18 +288,14 @@ func GetCustomType(req GetCustomTypeRequest) (CustomTypeResponse, error) {
 	if err := validate.Struct(req); err != nil {
 		return CustomTypeResponse{}, err
 	}
-
 	db := database.GetDB()
-
 	var customType models.CustomType
 	if err := db.First(&customType, req.ID).Error; err != nil {
 		return CustomTypeResponse{}, errors.New("custom type not found")
 	}
-
 	// 获取字段列表
 	var fields []models.CustomTypeField
 	db.Where("custom_type_id = ?", customType.ID).Find(&fields)
-
 	return CustomTypeResponse{CustomType: toCustomTypeDTO(customType, fields)}, nil
 }
 
@@ -340,37 +304,30 @@ func ListCustomTypes(req ListCustomTypesRequest) (CustomTypesResponse, error) {
 	if err := validate.Struct(req); err != nil {
 		return CustomTypesResponse{}, err
 	}
-
 	db := database.GetDB()
-
 	// 检查应用是否存在
 	var app models.Application
 	if err := db.First(&app, req.AppID).Error; err != nil {
 		return CustomTypesResponse{}, errors.New("application not found")
 	}
-
 	var customTypes []models.CustomType
 	if err := db.Where("app_id = ?", req.AppID).Find(&customTypes).Error; err != nil {
 		return CustomTypesResponse{}, err
 	}
-
-	// 批量获取所有字段
+	// 批量获取所有字段 增加AppId同样可以优化 避免where in 走不到索引
 	typeIDs := make([]int64, 0, len(customTypes))
 	for _, ct := range customTypes {
 		typeIDs = append(typeIDs, ct.ID)
 	}
-
 	var allFields []models.CustomTypeField
 	if len(typeIDs) > 0 {
 		db.Where("custom_type_id IN ?", typeIDs).Find(&allFields)
 	}
-
 	// 按 CustomTypeID 分组
 	fieldsByTypeID := make(map[int64][]models.CustomTypeField)
 	for _, field := range allFields {
 		fieldsByTypeID[field.CustomTypeID] = append(fieldsByTypeID[field.CustomTypeID], field)
 	}
-
 	// 构建 DTO
 	dtos := make([]CustomTypeDTO, 0, len(customTypes))
 	for _, ct := range customTypes {
@@ -380,7 +337,6 @@ func ListCustomTypes(req ListCustomTypesRequest) (CustomTypesResponse, error) {
 		}
 		dtos = append(dtos, toCustomTypeDTO(ct, fields))
 	}
-
 	return CustomTypesResponse{CustomTypes: dtos}, nil
 }
 
@@ -389,17 +345,13 @@ func UpdateCustomType(req UpdateCustomTypeRequest) (CustomTypeResponse, error) {
 	if err := validate.Struct(req); err != nil {
 		return CustomTypeResponse{}, err
 	}
-
 	db := database.GetDB()
-
 	var existing models.CustomType
 	if err := db.First(&existing, req.ID).Error; err != nil {
 		return CustomTypeResponse{}, errors.New("custom type not found")
 	}
-
 	// 使用事务
 	tx := db.Begin()
-
 	// 更新基本信息
 	if req.Name != nil {
 		// 检查名称唯一性
@@ -414,12 +366,10 @@ func UpdateCustomType(req UpdateCustomTypeRequest) (CustomTypeResponse, error) {
 	if req.Description != nil {
 		existing.Description = *req.Description
 	}
-
 	if err := tx.Save(&existing).Error; err != nil {
 		tx.Rollback()
 		return CustomTypeResponse{}, err
 	}
-
 	// 如果提供了字段列表，则完全替换
 	var fields []models.CustomTypeField
 	if req.Fields != nil {
@@ -437,16 +387,13 @@ func UpdateCustomType(req UpdateCustomTypeRequest) (CustomTypeResponse, error) {
 				}
 			}
 		}
-
 		// 检测循环引用
 		if err := checkCustomTypeCycleForUpdate(tx, existing.ID, existing.AppID, *req.Fields); err != nil {
 			tx.Rollback()
 			return CustomTypeResponse{}, err
 		}
-
 		// 删除旧字段
 		tx.Where("custom_type_id = ?", existing.ID).Delete(&models.CustomTypeField{})
-
 		// 创建新字段
 		for _, fieldReq := range *req.Fields {
 			field := models.CustomTypeField{
@@ -468,9 +415,7 @@ func UpdateCustomType(req UpdateCustomTypeRequest) (CustomTypeResponse, error) {
 		// 如果没有提供字段列表，保持原有字段
 		tx.Where("custom_type_id = ?", existing.ID).Find(&fields)
 	}
-
 	tx.Commit()
-
 	return CustomTypeResponse{CustomType: toCustomTypeDTO(existing, fields)}, nil
 }
 
@@ -479,43 +424,34 @@ func DeleteCustomType(req DeleteCustomTypeRequest) (EmptyResponse, error) {
 	if err := validate.Struct(req); err != nil {
 		return EmptyResponse{}, err
 	}
-
 	db := database.GetDB()
-
 	var customType models.CustomType
 	if err := db.First(&customType, req.ID).Error; err != nil {
 		return EmptyResponse{}, errors.New("custom type not found")
 	}
-
 	// 检查是否被其他类型的字段引用
 	var count int64
 	db.Model(&models.CustomTypeField{}).Where("ref = ?", customType.ID).Count(&count)
 	if count > 0 {
 		return EmptyResponse{}, errors.New("cannot delete custom type: referenced by other type fields")
 	}
-
 	// 检查是否被接口参数引用
 	db.Model(&models.InterfaceParameter{}).Where("ref = ?", customType.ID).Count(&count)
 	if count > 0 {
 		return EmptyResponse{}, errors.New("cannot delete custom type: referenced by interface parameters")
 	}
-
 	// 使用事务删除
 	tx := db.Begin()
-
 	// 删除字段
 	if err := tx.Where("custom_type_id = ?", customType.ID).Delete(&models.CustomTypeField{}).Error; err != nil {
 		tx.Rollback()
 		return EmptyResponse{}, err
 	}
-
 	// 删除类型
 	if err := tx.Delete(&customType).Error; err != nil {
 		tx.Rollback()
 		return EmptyResponse{}, err
 	}
-
 	tx.Commit()
-
 	return EmptyResponse{}, nil
 }

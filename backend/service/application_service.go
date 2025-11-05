@@ -29,13 +29,13 @@ type ListApplicationsRequest struct{}
 
 type UpdateApplicationRequest struct {
 	ID          int64   `json:"id" validate:"required,gt=0"`
-	Name        *string `json:"name,omitempty" validate:"max=128"`
-	Description *string `json:"description,omitempty" validate:"max=16384"`
-	Path        *string `json:"path,omitempty" validate:"required,max=128"`
-	Protocol    *string `json:"protocol,omitempty" validate:"required,oneof=http"`
-	PostProcess *string `json:"post_process,omitempty" validate:"max=1048576"`
-	Environment *string `json:"environment,omitempty" validate:"max=1048576"`
-	Enabled     *bool   `json:"enabled,omitempty"`
+	Name        *string `json:"name" validate:"required,max=128"`       // 应用名称 不允许重复
+	Description *string `json:"description" validate:"max=16384"`       // 应用描述
+	Path        *string `json:"path" validate:"required,max=128"`       // 应用路由标识
+	Protocol    *string `json:"protocol" validate:"required,oneof=sse"` // 应用暴露协议
+	PostProcess *string `json:"post_process" validate:"max=1048576"`    // 应用后处理脚本
+	Environment *string `json:"environment" validate:"max=1048576"`     // 应用环境变量
+	Enabled     *bool   `json:"enabled,omitempty"`                      // 是否启用应用
 }
 
 type DeleteApplicationRequest struct {
