@@ -2,7 +2,7 @@
 
 ## 实现内容
 
-为 MCP Adapter 项目添加了**自定义类型和接口参数的循环引用检测**功能,使用 **DFS (深度优先搜索)** 算法进行判环。
+为 MCP Adapter 项目添加了**自定义类型和接口参数的循环引用检测**功能,使用 **拓扑排序 (Kahn 算法)** 进行判环。
 
 ## 修改的文件
 
@@ -54,37 +54,62 @@ Linux/Mac Bash 测试脚本,用于验证循环引用检测功能。
 
 ## 核心算法
 
-### DFS 判环算法
+### 拓扑排序 (Kahn 算法)
 
 ```go
 // 伪代码
-visited := make(map[int64]bool)      // 已访问节点
-recStack := make(map[int64]bool)     // 递归栈中的节点
+graph := make(map[int64][]int64)      // 邻接表
+inDegree := make(map[int64]int)       // 入度表
 
-func dfs(node int64) bool {
-    visited[node] = true
-    recStack[node] = true
+// 1. 构建图和计算入度
+for each edge (u -> v) {
+    graph[u] = append(graph[u], v)
+    inDegree[v]++
+}
+
+// 2. 找出所有入度为0的节点
+queue := []int64{}
+for node := range graph {
+    if inDegree[node] == 0 {
+        queue = append(queue, node)
+    }
+}
+
+// 3. BFS 处理
+processedCount := 0
+for len(queue) > 0 {
+    current := queue[0]
+    queue = queue[1:]
+    processedCount++
     
-    for _, neighbor := range graph[node] {
-        if !visited[neighbor] {
-            if dfs(neighbor) {
-                return true  // 发现环
-            }
-        } else if recStack[neighbor] {
-            return true  // 发现环
+    for _, neighbor := range graph[current] {
+        inDegree[neighbor]--
+        if inDegree[neighbor] == 0 {
+            queue = append(queue, neighbor)
         }
     }
-    
-    recStack[node] = false
-    return false
+}
+
+// 4. 判断是否有环
+if processedCount < len(graph) {
+    return error("存在环")
 }
 ```
 
+### 算法优势
+
+相比 DFS 判环:
+- ✅ **性能更好**: 只需遍历一次图,无需递归
+- ✅ **空间效率高**: 只需入度表和队列,无需递归栈
+- ✅ **无栈溢出风险**: 使用迭代而非递归
+- ✅ **代码更简洁**: 逻辑清晰,易于理解和维护
+
 ### 检测流程
 
-1. **构建引用图**: 遍历所有自定义类型及其字段,构建 `typeID -> []refTypeID` 的引用关系图
-2. **DFS 遍历**: 从当前操作的类型开始,使用 DFS 检测是否存在环
-3. **返回结果**: 如果发现环,返回错误;否则允许操作继续
+1. **构建引用图**: 遍历所有自定义类型及其字段,构建 `typeID -> []refTypeID` 的邻接表
+2. **计算入度**: 统计每个节点被引用的次数
+3. **拓扑排序**: 使用 Kahn 算法进行 BFS 遍历
+4. **返回结果**: 如果处理的节点数小于总节点数,说明存在环,返回错误
 
 ## 检测场景
 

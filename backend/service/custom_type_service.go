@@ -124,34 +124,36 @@ func toCustomTypeDTO(m models.CustomType, fields []models.CustomTypeField) Custo
 
 // ========== 循环引用检测 ==========
 
-// checkCustomTypeCycle 检测自定义类型是否存在循环引用
+// checkCustomTypeCycle 使用拓扑排序(Kahn算法)检测自定义类型是否存在循环引用
 // typeID: 当前要创建/更新的类型ID (如果是创建则为0)
 // newFields: 新的字段列表(包含引用关系)
 func checkCustomTypeCycle(db *gorm.DB, typeID int64, appID int64, newFields []CreateCustomTypeFieldReq) error {
-	// 构建引用图: typeID -> []refTypeID
+	// 构建引用图: typeID -> []refTypeID (邻接表)
 	graph := make(map[int64][]int64)
+	// 入度表: typeID -> inDegree
+	inDegree := make(map[int64]int)
 	
-	// 获取应用下所有现有的自定义类型及其字段
+	// 获取应用下所有现有的自定义类型
 	var existingTypes []models.CustomType
 	db.Where("app_id = ?", appID).Find(&existingTypes)
 	
-	typeIDSet := make(map[int64]bool)
+	// 初始化所有节点
 	for _, t := range existingTypes {
-		typeIDSet[t.ID] = true
 		graph[t.ID] = []int64{}
+		inDegree[t.ID] = 0
 	}
 	
-	// 如果是创建新类型,添加到集合中
+	// 如果是创建新类型,添加到图中
 	if typeID == 0 {
 		// 使用临时ID表示新类型
 		typeID = -1
-		typeIDSet[typeID] = true
 		graph[typeID] = []int64{}
+		inDegree[typeID] = 0
 	}
 	
 	// 获取所有现有字段的引用关系
 	var existingFields []models.CustomTypeField
-	for tid := range typeIDSet {
+	for tid := range graph {
 		if tid > 0 { // 跳过临时ID
 			var fields []models.CustomTypeField
 			db.Where("custom_type_id = ?", tid).Find(&fields)
@@ -159,50 +161,57 @@ func checkCustomTypeCycle(db *gorm.DB, typeID int64, appID int64, newFields []Cr
 		}
 	}
 	
-	// 构建现有的引用关系
+	// 构建现有的引用关系和入度
 	for _, field := range existingFields {
 		if field.Type == "custom" && field.Ref != nil {
 			// 如果当前更新的类型,跳过其旧字段(稍后会用新字段替换)
 			if typeID > 0 && field.CustomTypeID == typeID {
 				continue
 			}
+			// 添加边: field.CustomTypeID -> *field.Ref
 			graph[field.CustomTypeID] = append(graph[field.CustomTypeID], *field.Ref)
+			inDegree[*field.Ref]++
 		}
 	}
 	
-	// 添加新字段的引用关系
+	// 添加新字段的引用关系和入度
 	for _, field := range newFields {
 		if field.Type == "custom" && field.Ref != nil {
+			// 添加边: typeID -> *field.Ref
 			graph[typeID] = append(graph[typeID], *field.Ref)
+			inDegree[*field.Ref]++
 		}
 	}
 	
-	// DFS 检测环
-	visited := make(map[int64]bool)
-	recStack := make(map[int64]bool)
+	// Kahn 算法: 拓扑排序检测环
+	// 1. 找出所有入度为0的节点
+	queue := []int64{}
+	for node := range graph {
+		if inDegree[node] == 0 {
+			queue = append(queue, node)
+		}
+	}
 	
-	var dfs func(int64) bool
-	dfs = func(node int64) bool {
-		visited[node] = true
-		recStack[node] = true
+	// 2. BFS 处理
+	processedCount := 0
+	for len(queue) > 0 {
+		// 取出队首节点
+		current := queue[0]
+		queue = queue[1:]
+		processedCount++
 		
-		for _, neighbor := range graph[node] {
-			if !visited[neighbor] {
-				if dfs(neighbor) {
-					return true
-				}
-			} else if recStack[neighbor] {
-				// 发现环
-				return true
+		// 遍历所有邻接节点
+		for _, neighbor := range graph[current] {
+			inDegree[neighbor]--
+			// 如果入度变为0,加入队列
+			if inDegree[neighbor] == 0 {
+				queue = append(queue, neighbor)
 			}
 		}
-		
-		recStack[node] = false
-		return false
 	}
 	
-	// 从当前类型开始检测
-	if dfs(typeID) {
+	// 3. 如果处理的节点数小于总节点数,说明存在环
+	if processedCount < len(graph) {
 		return errors.New("circular reference detected in custom type fields")
 	}
 	
