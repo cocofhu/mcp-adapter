@@ -29,7 +29,13 @@ func InitDatabase(dbPath string) {
 	}
 
 	// 自动迁移数据库表
-	err = db.AutoMigrate(&models.Application{}, &models.Interface{})
+	err = db.AutoMigrate(
+		&models.Application{},
+		&models.Interface{},
+		&models.CustomType{},
+		&models.CustomTypeField{},
+		&models.InterfaceParameter{},
+	)
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}

@@ -8,43 +8,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
-
-// HTTPOptions 解析 Interface.Options 的结构
-// 示例见用户提供的 JSON
-type HTTPOptions struct {
-	Method         string          `json:"method"`
-	Parameters     []HTTPParam     `json:"parameters"`
-	DefaultParams  []HTTPParamVal  `json:"defaultParams"`
-	DefaultHeaders []HTTPHeaderVal `json:"defaultHeaders"`
-}
-
-type HTTPParam struct {
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Required    bool   `json:"required"`
-	Location    string `json:"location"` // body|query|header
-	Description string `json:"description"`
-}
-
-type HTTPParamVal struct {
-	Name        string  `json:"name"`
-	Value       any     `json:"value"`
-	Type        string  `json:"type"`
-	Location    string  `json:"location"` // body|query|header
-	Description *string `json:"description"`
-}
-
-type HTTPHeaderVal struct {
-	Name        string  `json:"name"`
-	Value       string  `json:"value"`
-	Description *string `json:"description"`
-}
 
 // BuildHTTPRequest 根据 Interface 和参数构建 http.Request
 func BuildHTTPRequest(ctx context.Context, iface *models.Interface, args map[string]any) (*http.Request, error) {
@@ -58,14 +28,12 @@ func BuildHTTPRequest(ctx context.Context, iface *models.Interface, args map[str
 		return nil, errors.New("interface url is empty")
 	}
 
-	var opts HTTPOptions
-	if strings.TrimSpace(iface.Options) != "" {
-		if err := json.Unmarshal([]byte(iface.Options), &opts); err != nil {
-			return nil, fmt.Errorf("invalid options json: %w", err)
-		}
-	}
+	// 从数据库获取接口参数
+	db := database.GetDB()
+	var params []models.InterfaceParameter
+	db.Where("interface_id = ?", iface.ID).Find(&params)
 
-	method := strings.ToUpper(strings.TrimSpace(opts.Method))
+	method := strings.ToUpper(strings.TrimSpace(iface.Method))
 	if method == "" {
 		method = http.MethodGet
 	}
@@ -75,64 +43,50 @@ func BuildHTTPRequest(ctx context.Context, iface *models.Interface, args map[str
 	bodyMap := make(map[string]any)
 	headers := make(http.Header)
 
-	// Apply default headers
-	for _, h := range opts.DefaultHeaders {
-		headers.Set(h.Name, h.Value)
-	}
-	// Apply default params
-	for _, p := range opts.DefaultParams {
-		switch strings.ToLower(p.Location) {
-		case "query":
-			queryVals.Set(p.Name, fmt.Sprintf("%v", p.Value))
-		case "header":
-			headers.Set(p.Name, fmt.Sprintf("%v", p.Value))
-		default: // body
-			bodyMap[p.Name] = p.Value
+	// 构建参数索引
+	paramIndex := make(map[string]models.InterfaceParameter)
+	for _, p := range params {
+		paramIndex[p.Name] = p
+		
+		// 应用默认值
+		if p.DefaultValue != nil && args[p.Name] == nil {
+			args[p.Name] = *p.DefaultValue
 		}
 	}
 
-	// Validate and apply provided args according to parameter definitions
-	paramIndex := make(map[string]HTTPParam)
-	for _, pd := range opts.Parameters {
-		paramIndex[pd.Name] = pd
-	}
+	// 应用提供的参数
 	for name, val := range args {
-		pd, ok := paramIndex[name]
+		p, ok := paramIndex[name]
 		if ok {
-			switch strings.ToLower(pd.Location) {
+			switch strings.ToLower(p.Location) {
 			case "query":
 				queryVals.Set(name, fmt.Sprintf("%v", val))
 			case "header":
 				headers.Set(name, fmt.Sprintf("%v", val))
+			case "path":
+				// Path 参数需要在 URL 中替换占位符
+				// 例如: /users/{id} -> /users/123
+				// 这里暂时不处理，可以后续扩展
 			default: // body
 				bodyMap[name] = val
 			}
 		} else {
-			// If not defined, default to body
+			// 如果参数未定义，默认放到 body
 			bodyMap[name] = val
 		}
 	}
-	// Check required params
-	for _, pd := range opts.Parameters {
-		if pd.Required {
-			_, provided := args[pd.Name]
-			if !provided {
-				// If default covers it, allow
-				covered := false
-				for _, dp := range opts.DefaultParams {
-					if dp.Name == pd.Name {
-						covered = true
-						break
-					}
-				}
-				if !covered {
-					return nil, fmt.Errorf("missing required param: %s", pd.Name)
-				}
+
+	// 检查必填参数
+	for _, p := range params {
+		if p.Required {
+			_, provided := args[p.Name]
+			if !provided && p.DefaultValue == nil {
+				return nil, fmt.Errorf("missing required parameter: %s", p.Name)
 			}
 		}
 	}
 
-	// If GET/HEAD, move body params into query
+	// 如果是 GET/HEAD，将 body 参数移到 query
 	if method == http.MethodGet || method == http.MethodHead {
 		for k, v := range bodyMap {
 			queryVals.Set(k, fmt.Sprintf("%v", v))

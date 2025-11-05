@@ -2,7 +2,6 @@ package adapter
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"mcp-adapter/backend/database"
@@ -92,53 +91,47 @@ func GetServerImpl(path string) http.Handler {
 	return nil
 }
 
-type ToolParameter struct {
-	Name        string `json:"name" validate:"required"`
-	Type        string `json:"type" validate:"oneof=sse streamable"`
-	Required    bool   `json:"required"`
-	Location    string `json:"location" validate:"oneof=query header body"`
-	Description string `json:"description"`
-}
-type ToolOptions struct {
-	Method            string          `json:"method"`
-	Parameters        []ToolParameter `json:"parameters"`
-	DefaultParameters []ToolParameter `json:"defaultParams"`
-	DefaultHeaders    []ToolParameter `json:"defaultHeaders"`
-}
-
 func addTool(iface *models.Interface, app *models.Application) {
-
 	if s, ok := sseServer[app.Path]; ok {
 		tool := s.server.GetTool(iface.Name)
 		if tool != nil {
 			log.Printf("tool %s in %s already exists, skipped!", iface.Name, app.Name)
 			return
 		}
-		var spec ToolOptions
-		err := json.Unmarshal([]byte(iface.Options), &spec)
-		if err != nil {
-			log.Fatalf("Error unmarshalling options: %v", err)
-			return
-		}
+		
+		// 从数据库获取接口参数
+		db := database.GetDB()
+		var params []models.InterfaceParameter
+		db.Where("interface_id = ?", iface.ID).Find(&params)
+		
 		options := make([]mcp.ToolOption, 0)
 		options = append(options, mcp.WithDescription(iface.Description))
-		for _, p := range spec.Parameters {
+		
+		for _, p := range params {
 			pos := make([]mcp.PropertyOption, 0)
 			pos = append(pos, mcp.Description(p.Description))
 			if p.Required {
 				pos = append(pos, mcp.Required())
 			}
-			if p.Type == "string" {
+			
+			// 根据类型添加参数
+			switch p.Type {
+			case "string":
 				options = append(options, mcp.WithString(p.Name, pos...))
-			} else if p.Type == "int64" {
+			case "number":
 				options = append(options, mcp.WithNumber(p.Name, pos...))
-			} else if p.Type == "bool" {
+			case "boolean":
 				options = append(options, mcp.WithBoolean(p.Name, pos...))
-			} else {
-				log.Printf("Unknown option type: %s, using string as default", p.Type)
+			case "custom":
+				// 自定义类型暂时作为 object 处理
+				// TODO: 可以递归展开自定义类型的字段
+				options = append(options, mcp.WithString(p.Name, pos...))
+			default:
+				log.Printf("Unknown parameter type: %s, using string as default", p.Type)
 				options = append(options, mcp.WithString(p.Name, pos...))
 			}
 		}
+		
 		newTool := mcp.NewTool(iface.Name, options...)
 
 		s.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

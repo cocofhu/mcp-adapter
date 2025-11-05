@@ -1,11 +1,8 @@
 package models
 
 import (
-	"encoding/json"
-	"errors"
 	"time"
 
-	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 )
 
@@ -32,55 +29,55 @@ type Interface struct {
 	Description string         `json:"description" gorm:"size:16384"`                     // 接口描述
 	Protocol    string         `json:"protocol"`                                          // 接口协议: HTTP
 	URL         string         `json:"url"`                                               // 接口地址
+	Method      string         `json:"method" gorm:"size:50"`                             // HTTP方法: GET, POST, PUT, DELETE等
 	AuthType    string         `json:"auth_type"`                                         // 鉴权类型
 	Enabled     bool           `json:"enabled" gorm:"default:true"`                       // 是否启用
 	PostProcess string         `json:"post_process" gorm:"size:1048576"`                  // 后处理脚本
-	Options     string         `json:"options" gorm:"size:500"`                           // 选择配置(JSON String), 包含Method, Parameter等参数
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
-// CustomType 自定义类型实体
+// CustomType 自定义类型定义（纯类型定义，不包含使用属性）
 type CustomType struct {
-	ID          int64          `json:"id" gorm:"primaryKey"`                               //类型ID
-	AppID       int64          `json:"app_id" gorm:"not null;index" validate:"required"`   // 应用ID 一个应用对应多个CustomType
-	Name        string         `json:"name" validate:"required"`                           // 类型名称
-	Type        string         `json:"type" validate:"oneof=number string boolean custom"` // 类型 custom表示复杂类型
-	Description string         `json:"description" gorm:"size:16384"`                      // 类型说明 该参数会传入LLM
-	IsArray     bool           `json:"isArray"`                                            // 是否是数组
-	Required    bool           `json:"required"`                                           // 是否必须参数
-	Ref         *int64         `json:"ref"`                                                // 如果是复杂类型, 则引用CustomType.ID
+	ID          int64          `json:"id" gorm:"primaryKey"`
+	AppID       int64          `json:"app_id" gorm:"not null;index" validate:"required"`
+	Name        string         `json:"name" gorm:"not null;size:255" validate:"required"` // 类型名称，如 "User", "Address"
+	Description string         `json:"description" gorm:"size:16384"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
-type ToolParameter struct {
-	Name     string     `json:"name" validate:"required"`
-	Type     CustomType `json:"type"`
-	Location string     `json:"location" validate:"oneof=query header body"`
-	Value    *string    `json:"value"`
-}
-type ToolOptions struct {
-	Method            string          `json:"method" validate:"oneof=GET POST PUT PATCH DELETE"`
-	Parameters        []ToolParameter `json:"parameters"`
-	DefaultParameters []ToolParameter `json:"defaultParams"`
-}
-
-func (iface *Interface) GetToolOptions() (ToolOptions, error) {
-	var spec ToolOptions
-	err := json.Unmarshal([]byte(iface.Options), &spec)
-	if err != nil {
-		return spec, err
-	}
-	return spec, nil
+// CustomTypeField 自定义类型的字段定义
+type CustomTypeField struct {
+	ID           int64          `json:"id" gorm:"primaryKey"`
+	CustomTypeID int64          `json:"custom_type_id" gorm:"not null;index"`               // 所属类型ID
+	Name         string         `json:"name" gorm:"not null;size:255" validate:"required"`  // 字段名
+	Type         string         `json:"type" validate:"oneof=number string boolean custom"` // 字段类型
+	Ref          *int64         `json:"ref"`                                                // 如果是 custom 类型，引用 CustomType.ID
+	IsArray      bool           `json:"is_array"`                                           // 是否数组
+	Required     bool           `json:"required"`                                           // 该字段是否必填
+	Description  string         `json:"description" gorm:"size:16384"`                      // 字段描述
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
-func (to *ToolOptions) Validate() error {
-	if to == nil {
-		return errors.New("tool options is nil")
-	}
-	validate := validator.New()
-	return validate.Struct(to)
+// InterfaceParameter 接口参数（使用类型）
+type InterfaceParameter struct {
+	ID           int64          `json:"id" gorm:"primaryKey"`
+	AppID        int64          `json:"app_id" gorm:"not null;index" validate:"required"`   // 应用ID 用于后续查询
+	InterfaceID  int64          `json:"interface_id" gorm:"not null;index"`                 // 接口ID
+	Name         string         `json:"name" gorm:"not null;size:255" validate:"required"`  // 类型名称
+	Type         string         `json:"type" validate:"oneof=number string boolean custom"` // 类型
+	Ref          *int64         `json:"ref"`                                                // 如果是 custom 类型，引用 CustomType.ID
+	Location     string         `json:"location" validate:"oneof=query header body path"`   // 参数位置
+	IsArray      bool           `json:"is_array"`                                           // 是否为数组类型
+	Required     bool           `json:"required"`                                           // 添加必填标识
+	Description  string         `json:"description" gorm:"size:16384"`
+	DefaultValue *string        `json:"default_value"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 }

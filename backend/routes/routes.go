@@ -33,6 +33,13 @@ func SetupRoutes() *gin.Engine {
 		api.GET("/interfaces/:id", handlers.GetInterface)
 		api.PUT("/interfaces/:id", handlers.UpdateInterface)
 		api.DELETE("/interfaces/:id", handlers.DeleteInterface)
+
+		// 自定义类型相关路由
+		api.POST("/custom-types", handlers.CreateCustomType)
+		api.GET("/custom-types", handlers.GetCustomTypes)       // 需要 app_id 查询参数
+		api.GET("/custom-types/:id", handlers.GetCustomType)
+		api.PUT("/custom-types/:id", handlers.UpdateCustomType)
+		api.DELETE("/custom-types/:id", handlers.DeleteCustomType)
 	}
 
 	// 静态文件服务
