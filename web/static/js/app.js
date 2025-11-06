@@ -644,16 +644,6 @@ function editCustomType(id) {
     showTypeForm(id);
 }
 
-function addEditFieldRow() {
-    // 这个函数已经不需要了,统一使用addFieldRow
-    addFieldRow();
-}
-        </div>
-        <input type="text" class="field-desc-input" placeholder="字段描述（可选）">
-    `;
-    container.appendChild(row);
-}
-
 async function deleteCustomType(id) {
     if (!confirm('确定要删除此类型吗？')) return;
     
@@ -1033,11 +1023,6 @@ function viewInterface(id) {
 
 async function editInterface(id) {
     await showInterfaceForm(id);
-}
-
-function addEditParamRow() {
-    // 这个函数已经不需要了,统一使用addParamRow
-    addParamRow();
 }
 
 async function deleteInterface(id) {
