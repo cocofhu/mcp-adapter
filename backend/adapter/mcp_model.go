@@ -67,7 +67,7 @@ func InitServer() {
 			),
 		}
 		for _, iface := range interfaces {
-			go addTool(&iface, &app)
+			addTool(&iface, &app)
 		}
 		log.Printf("Added SSE server: %s, path : %s", app.Name, fmt.Sprintf("/sse/%s", app.Path))
 	}
@@ -98,22 +98,22 @@ func addTool(iface *models.Interface, app *models.Application) {
 			log.Printf("tool %s in %s already exists, skipped!", iface.Name, app.Name)
 			return
 		}
-		
+
 		// 从数据库获取接口参数
 		db := database.GetDB()
 		var params []models.InterfaceParameter
 		db.Where("interface_id = ?", iface.ID).Find(&params)
-		
+
 		options := make([]mcp.ToolOption, 0)
 		options = append(options, mcp.WithDescription(iface.Description))
-		
+
 		for _, p := range params {
 			pos := make([]mcp.PropertyOption, 0)
 			pos = append(pos, mcp.Description(p.Description))
 			if p.Required {
 				pos = append(pos, mcp.Required())
 			}
-			
+
 			// 根据类型添加参数
 			switch p.Type {
 			case "string":
@@ -131,7 +131,7 @@ func addTool(iface *models.Interface, app *models.Application) {
 				options = append(options, mcp.WithString(p.Name, pos...))
 			}
 		}
-		
+
 		newTool := mcp.NewTool(iface.Name, options...)
 
 		s.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
