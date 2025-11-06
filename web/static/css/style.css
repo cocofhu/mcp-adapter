@@ -471,6 +471,23 @@ body {
 }
 
 /* ========== 表单 ========== */
+.form-container {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 32px;
+    max-width: 900px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color);
+}
+
 .form-group {
     margin-bottom: 20px;
 }

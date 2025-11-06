@@ -211,50 +211,86 @@ function updateAppSelectors(apps) {
     });
 }
 
-// 创建应用
-document.getElementById('create-app-btn').addEventListener('click', () => {
-    showModal('创建应用', `
-        <div class="form-group">
-            <label class="required">应用名称</label>
-            <input type="text" id="app-name" placeholder="例如: 我的API服务">
-        </div>
-        <div class="form-group">
-            <label>应用描述</label>
-            <textarea id="app-description" rows="3" placeholder="描述应用的功能"></textarea>
-        </div>
-        <div class="form-group">
-            <label class="required">应用路径</label>
-            <input type="text" id="app-path" placeholder="例如: my-api">
-        </div>
-        <div class="form-group">
-            <label class="required">协议类型</label>
-            <select id="app-protocol">
-                <option value="sse">SSE</option>
-                <option value="http">HTTP</option>
-            </select>
-        </div>
-    `, async () => {
-        const name = document.getElementById('app-name').value;
-        const description = document.getElementById('app-description').value;
-        const path = document.getElementById('app-path').value;
-        const protocol = document.getElementById('app-protocol').value;
-        
-        if (!name || !path) {
-            showToast('请填写必填字段', 'error');
-            return;
+// 应用表单状态
+let currentAppId = null;
+
+// 显示应用表单
+function showAppForm(appId = null) {
+    currentAppId = appId;
+    document.getElementById('app-list-view').style.display = 'none';
+    document.getElementById('app-form-view').style.display = 'block';
+    
+    if (appId) {
+        // 编辑模式
+        const app = state.applications.find(a => a.id === appId);
+        if (app) {
+            document.getElementById('app-form-title').textContent = '编辑应用';
+            document.getElementById('app-form-subtitle').textContent = '修改应用信息';
+            document.getElementById('app-name').value = app.name;
+            document.getElementById('app-description').value = app.description || '';
+            document.getElementById('app-path').value = app.path;
+            document.getElementById('app-protocol').value = app.protocol;
         }
-        
-        try {
+    } else {
+        // 创建模式
+        document.getElementById('app-form-title').textContent = '创建应用';
+        document.getElementById('app-form-subtitle').textContent = '填写应用信息';
+        document.getElementById('app-name').value = '';
+        document.getElementById('app-description').value = '';
+        document.getElementById('app-path').value = '';
+        document.getElementById('app-protocol').value = 'sse';
+    }
+}
+
+// 隐藏应用表单
+function hideAppForm() {
+    document.getElementById('app-list-view').style.display = 'block';
+    document.getElementById('app-form-view').style.display = 'none';
+    currentAppId = null;
+}
+
+// 创建应用按钮
+document.getElementById('create-app-btn').addEventListener('click', () => {
+    showAppForm();
+});
+
+// 应用表单返回按钮
+document.getElementById('app-form-back').addEventListener('click', hideAppForm);
+document.getElementById('app-form-cancel').addEventListener('click', hideAppForm);
+
+// 应用表单提交
+document.getElementById('app-form-submit').addEventListener('click', async () => {
+    const name = document.getElementById('app-name').value;
+    const description = document.getElementById('app-description').value;
+    const path = document.getElementById('app-path').value;
+    const protocol = document.getElementById('app-protocol').value;
+    
+    if (!name || !path) {
+        showToast('请填写必填字段', 'error');
+        return;
+    }
+    
+    try {
+        if (currentAppId) {
+            // 更新
+            await apiRequest(`/applications/${currentAppId}`, {
+                method: 'PUT',
+                body: JSON.stringify({ name, description, path, protocol })
+            });
+            showToast('应用更新成功', 'success');
+        } else {
+            // 创建
             await apiRequest('/applications', {
                 method: 'POST',
                 body: JSON.stringify({ name, description, path, protocol, enabled: true })
             });
             showToast('应用创建成功', 'success');
-            loadApplications();
-        } catch (error) {
-            showToast('创建失败: ' + error.message, 'error');
         }
-    });
+        hideAppForm();
+        loadApplications();
+    } catch (error) {
+        showToast('操作失败: ' + error.message, 'error');
+    }
 });
 
 function viewApplication(id) {
@@ -273,38 +309,7 @@ function viewApplication(id) {
 }
 
 function editApplication(id) {
-    const app = state.applications.find(a => a.id === id);
-    if (!app) return;
-    
-    showModal('编辑应用', `
-        <div class="form-group">
-            <label>应用名称</label>
-            <input type="text" id="edit-app-name" value="${app.name}">
-        </div>
-        <div class="form-group">
-            <label>应用描述</label>
-            <textarea id="edit-app-description" rows="3">${app.description || ''}</textarea>
-        </div>
-        <div class="form-group">
-            <label>应用路径</label>
-            <input type="text" id="edit-app-path" value="${app.path}">
-        </div>
-    `, async () => {
-        const name = document.getElementById('edit-app-name').value;
-        const description = document.getElementById('edit-app-description').value;
-        const path = document.getElementById('edit-app-path').value;
-        
-        try {
-            await apiRequest(`/applications/${id}`, {
-                method: 'PUT',
-                body: JSON.stringify({ name, description, path })
-            });
-            showToast('应用更新成功', 'success');
-            loadApplications();
-        } catch (error) {
-            showToast('更新失败: ' + error.message, 'error');
-        }
-    });
+    showAppForm(id);
 }
 
 async function deleteApplication(id) {
@@ -320,6 +325,128 @@ async function deleteApplication(id) {
 }
 
 // ========== 自定义类型管理 ==========
+
+// 类型表单状态
+let currentTypeId = null;
+
+// 显示类型表单
+function showTypeForm(typeId = null) {
+    const appId = document.getElementById('global-app-select').value;
+    if (!appId) {
+        showToast('请先选择一个应用', 'warning');
+        return;
+    }
+    
+    currentTypeId = typeId;
+    document.getElementById('type-list-view').style.display = 'none';
+    document.getElementById('type-form-view').style.display = 'block';
+    
+    // 清空字段容器
+    document.getElementById('fields-container').innerHTML = '';
+    
+    if (typeId) {
+        // 编辑模式
+        const type = state.customTypes.find(t => t.id === typeId);
+        if (type) {
+            document.getElementById('type-form-title').textContent = '编辑类型';
+            document.getElementById('type-form-subtitle').textContent = '修改类型信息';
+            document.getElementById('type-name').value = type.name;
+            document.getElementById('type-description').value = type.description || '';
+            
+            // 加载字段
+            if (type.fields && type.fields.length > 0) {
+                type.fields.forEach(field => {
+                    addFieldRow(field);
+                });
+            } else {
+                addFieldRow();
+            }
+        }
+    } else {
+        // 创建模式
+        document.getElementById('type-form-title').textContent = '创建类型';
+        document.getElementById('type-form-subtitle').textContent = '定义数据类型和字段';
+        document.getElementById('type-name').value = '';
+        document.getElementById('type-description').value = '';
+        addFieldRow();
+    }
+}
+
+// 隐藏类型表单
+function hideTypeForm() {
+    document.getElementById('type-list-view').style.display = 'block';
+    document.getElementById('type-form-view').style.display = 'none';
+    currentTypeId = null;
+}
+
+// 创建类型按钮
+document.getElementById('create-type-btn').addEventListener('click', () => {
+    showTypeForm();
+});
+
+// 类型表单返回按钮
+document.getElementById('type-form-back').addEventListener('click', hideTypeForm);
+document.getElementById('type-form-cancel').addEventListener('click', hideTypeForm);
+
+// 类型表单提交
+document.getElementById('type-form-submit').addEventListener('click', async () => {
+    const appId = document.getElementById('global-app-select').value;
+    const name = document.getElementById('type-name').value;
+    const description = document.getElementById('type-description').value;
+    
+    if (!name) {
+        showToast('请填写类型名称', 'error');
+        return;
+    }
+    
+    const fields = [];
+    document.querySelectorAll('.field-row').forEach(row => {
+        const fieldName = row.querySelector('.field-name-input').value;
+        const fieldType = row.querySelector('.field-type-select').value;
+        const fieldRef = row.querySelector('.field-ref-input')?.value;
+        const fieldIsArray = row.querySelector('.field-array-checkbox')?.checked || false;
+        const fieldRequired = row.querySelector('.field-required-checkbox').checked;
+        const fieldDesc = row.querySelector('.field-desc-input').value;
+        
+        if (fieldName) {
+            const field = {
+                name: fieldName,
+                type: fieldType,
+                is_array: fieldIsArray,
+                required: fieldRequired,
+                description: fieldDesc
+            };
+            
+            if (fieldType === 'custom' && fieldRef) {
+                field.ref = parseInt(fieldRef);
+            }
+            
+            fields.push(field);
+        }
+    });
+    
+    try {
+        if (currentTypeId) {
+            // 更新
+            await apiRequest(`/custom-types/${currentTypeId}`, {
+                method: 'PUT',
+                body: JSON.stringify({ name, description, fields })
+            });
+            showToast('类型更新成功', 'success');
+        } else {
+            // 创建
+            await apiRequest('/custom-types', {
+                method: 'POST',
+                body: JSON.stringify({ app_id: parseInt(appId), name, description, fields })
+            });
+            showToast('类型创建成功', 'success');
+        }
+        hideTypeForm();
+        loadCustomTypes();
+    } catch (error) {
+        showToast('操作失败: ' + error.message, 'error');
+    }
+});
 
 // 获取字段类型的显示名称
 function getFieldTypeDisplay(field) {
@@ -421,123 +548,52 @@ document.getElementById('type-search')?.addEventListener('input', () => {
     renderCustomTypes(state.customTypes);
 });
 
-// 创建自定义类型
-document.getElementById('create-type-btn').addEventListener('click', () => {
-    const appId = document.getElementById('global-app-select').value;
-    if (!appId) {
-        showToast('请先选择一个应用', 'warning');
-        return;
-    }
-    
-    showModal('创建自定义类型', `
-        <div class="form-group">
-            <label class="required">类型名称</label>
-            <input type="text" id="type-name" placeholder="例如: User">
-        </div>
-        <div class="form-group">
-            <label>类型描述</label>
-            <textarea id="type-description" rows="2" placeholder="描述这个类型的用途"></textarea>
-        </div>
-        <div class="form-group">
-            <label>字段定义</label>
-            <div id="fields-container"></div>
-            <button type="button" class="btn btn-secondary mt-2" onclick="addFieldRow()">
-                <i class="fas fa-plus"></i> 添加字段
-            </button>
-        </div>
-    `, async () => {
-        const name = document.getElementById('type-name').value;
-        const description = document.getElementById('type-description').value;
-        
-        if (!name) {
-            showToast('请填写类型名称', 'error');
-            return;
-        }
-        
-        const fields = [];
-        document.querySelectorAll('.field-row').forEach(row => {
-            const fieldName = row.querySelector('.field-name-input').value;
-            const fieldType = row.querySelector('.field-type-select').value;
-            const fieldRef = row.querySelector('.field-ref-input')?.value;
-            const fieldIsArray = row.querySelector('.field-array-checkbox')?.checked || false;
-            const fieldRequired = row.querySelector('.field-required-checkbox').checked;
-            const fieldDesc = row.querySelector('.field-desc-input').value;
-            
-            if (fieldName) {
-                const field = {
-                    name: fieldName,
-                    type: fieldType,
-                    is_array: fieldIsArray,
-                    required: fieldRequired,
-                    description: fieldDesc
-                };
-                
-                // 如果是自定义类型，添加引用
-                if (fieldType === 'custom' && fieldRef) {
-                    field.ref = parseInt(fieldRef);
-                }
-                
-                fields.push(field);
-            }
-        });
-        
-        try {
-            await apiRequest('/custom-types', {
-                method: 'POST',
-                body: JSON.stringify({ app_id: parseInt(appId), name, description, fields })
-            });
-            showToast('类型创建成功', 'success');
-            loadCustomTypes();
-        } catch (error) {
-            showToast('创建失败: ' + error.message, 'error');
-        }
-    });
-    
-    // 添加一个默认字段行
-    setTimeout(() => addFieldRow(), 100);
-});
-
-function addFieldRow() {
+function addFieldRow(fieldData = null) {
     const container = document.getElementById('fields-container');
     const row = document.createElement('div');
     row.className = 'field-row mb-2';
     
     // 构建类型选项（包含自定义类型）
-    let typeOptions = `
-        <option value="string">string</option>
-        <option value="number">number</option>
-        <option value="boolean">boolean</option>
-    `;
-    
-    // 添加当前应用的自定义类型
-    if (state.customTypes && state.customTypes.length > 0) {
-        typeOptions += '<optgroup label="自定义类型">';
-        state.customTypes.forEach(type => {
-            typeOptions += `<option value="custom" data-ref="${type.id}">${type.name}</option>`;
-        });
-        typeOptions += '</optgroup>';
-    }
+    const buildTypeOptions = () => {
+        let options = `
+            <option value="string" ${fieldData && fieldData.type === 'string' ? 'selected' : ''}>string</option>
+            <option value="number" ${fieldData && fieldData.type === 'number' ? 'selected' : ''}>number</option>
+            <option value="boolean" ${fieldData && fieldData.type === 'boolean' ? 'selected' : ''}>boolean</option>
+        `;
+        
+        // 添加当前应用的自定义类型
+        if (state.customTypes && state.customTypes.length > 0) {
+            options += '<optgroup label="自定义类型">';
+            state.customTypes.forEach(type => {
+                const isSelected = fieldData && fieldData.type === 'custom' && fieldData.ref === type.id;
+                options += `<option value="custom" data-ref="${type.id}" ${isSelected ? 'selected' : ''}>${type.name}</option>`;
+            });
+            options += '</optgroup>';
+        }
+        
+        return options;
+    };
     
     row.innerHTML = `
         <div class="form-row">
-            <input type="text" class="field-name-input" placeholder="字段名">
+            <input type="text" class="field-name-input" placeholder="字段名" value="${fieldData ? fieldData.name : ''}">
             <select class="field-type-select" onchange="handleTypeChange(this)">
-                ${typeOptions}
+                ${buildTypeOptions()}
             </select>
-            <input type="hidden" class="field-ref-input" value="">
+            <input type="hidden" class="field-ref-input" value="${fieldData && fieldData.ref ? fieldData.ref : ''}">
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="field-array-checkbox">
+                <input type="checkbox" class="field-array-checkbox" ${fieldData && fieldData.is_array ? 'checked' : ''}>
                 数组
             </label>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="field-required-checkbox">
+                <input type="checkbox" class="field-required-checkbox" ${fieldData && fieldData.required ? 'checked' : ''}>
                 必填
             </label>
             <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
                 <i class="fas fa-times"></i>
             </button>
         </div>
-        <input type="text" class="field-desc-input" placeholder="字段描述（可选）">
+        <input type="text" class="field-desc-input" placeholder="字段描述（可选）" value="${fieldData && fieldData.description ? fieldData.description : ''}">
     `;
     container.appendChild(row);
 }
@@ -585,155 +641,13 @@ function viewCustomType(id) {
 }
 
 function editCustomType(id) {
-    const type = state.customTypes.find(t => t.id === id);
-    if (!type) return;
-    
-    // 构建类型选项（包含自定义类型，排除当前编辑的类型）
-    const buildTypeOptions = (currentType, currentRef) => {
-        let options = `
-            <option value="string" ${currentType === 'string' ? 'selected' : ''}>string</option>
-            <option value="number" ${currentType === 'number' ? 'selected' : ''}>number</option>
-            <option value="boolean" ${currentType === 'boolean' ? 'selected' : ''}>boolean</option>
-        `;
-        
-        if (state.customTypes && state.customTypes.length > 0) {
-            options += '<optgroup label="自定义类型">';
-            state.customTypes.forEach(ct => {
-                // 排除当前正在编辑的类型，避免循环引用
-                if (ct.id !== type.id) {
-                    const isSelected = currentType === 'custom' && currentRef === ct.id;
-                    options += `<option value="custom" data-ref="${ct.id}" ${isSelected ? 'selected' : ''}>${ct.name}</option>`;
-                }
-            });
-            options += '</optgroup>';
-        }
-        
-        return options;
-    };
-    
-    showModal('编辑自定义类型', `
-        <div class="form-group">
-            <label>类型名称</label>
-            <input type="text" id="edit-type-name" value="${type.name}">
-        </div>
-        <div class="form-group">
-            <label>类型描述</label>
-            <textarea id="edit-type-description" rows="2">${type.description || ''}</textarea>
-        </div>
-        <div class="form-group">
-            <label>字段定义</label>
-            <div id="edit-fields-container">
-                ${type.fields?.map(field => `
-                    <div class="field-row mb-2">
-                        <div class="form-row">
-                            <input type="text" class="field-name-input" value="${field.name}" placeholder="字段名">
-                            <select class="field-type-select" onchange="handleTypeChange(this)">
-                                ${buildTypeOptions(field.type, field.ref)}
-                            </select>
-                            <input type="hidden" class="field-ref-input" value="${field.ref || ''}">
-                            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                                <input type="checkbox" class="field-array-checkbox" ${field.is_array ? 'checked' : ''}>
-                                数组
-                            </label>
-                            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                                <input type="checkbox" class="field-required-checkbox" ${field.required ? 'checked' : ''}>
-                                必填
-                            </label>
-                            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                        <input type="text" class="field-desc-input" value="${field.description || ''}" placeholder="字段描述（可选）">
-                    </div>
-                `).join('') || ''}
-            </div>
-            <button type="button" class="btn btn-secondary mt-2" onclick="addEditFieldRow()">
-                <i class="fas fa-plus"></i> 添加字段
-            </button>
-        </div>
-    `, async () => {
-        const name = document.getElementById('edit-type-name').value;
-        const description = document.getElementById('edit-type-description').value;
-        
-        const fields = [];
-        document.querySelectorAll('#edit-fields-container .field-row').forEach(row => {
-            const fieldName = row.querySelector('.field-name-input').value;
-            const fieldType = row.querySelector('.field-type-select').value;
-            const fieldRef = row.querySelector('.field-ref-input')?.value;
-            const fieldIsArray = row.querySelector('.field-array-checkbox')?.checked || false;
-            const fieldRequired = row.querySelector('.field-required-checkbox').checked;
-            const fieldDesc = row.querySelector('.field-desc-input').value;
-            
-            if (fieldName) {
-                const field = {
-                    name: fieldName,
-                    type: fieldType,
-                    is_array: fieldIsArray,
-                    required: fieldRequired,
-                    description: fieldDesc
-                };
-                
-                // 如果是自定义类型，添加引用
-                if (fieldType === 'custom' && fieldRef) {
-                    field.ref = parseInt(fieldRef);
-                }
-                
-                fields.push(field);
-            }
-        });
-        
-        try {
-            await apiRequest(`/custom-types/${id}`, {
-                method: 'PUT',
-                body: JSON.stringify({ name, description, fields })
-            });
-            showToast('类型更新成功', 'success');
-            loadCustomTypes();
-        } catch (error) {
-            showToast('更新失败: ' + error.message, 'error');
-        }
-    });
+    showTypeForm(id);
 }
 
 function addEditFieldRow() {
-    const container = document.getElementById('edit-fields-container');
-    const row = document.createElement('div');
-    row.className = 'field-row mb-2';
-    
-    // 构建类型选项（包含自定义类型）
-    let typeOptions = `
-        <option value="string">string</option>
-        <option value="number">number</option>
-        <option value="boolean">boolean</option>
-    `;
-    
-    // 添加当前应用的自定义类型
-    if (state.customTypes && state.customTypes.length > 0) {
-        typeOptions += '<optgroup label="自定义类型">';
-        state.customTypes.forEach(type => {
-            typeOptions += `<option value="custom" data-ref="${type.id}">${type.name}</option>`;
-        });
-        typeOptions += '</optgroup>';
-    }
-    
-    row.innerHTML = `
-        <div class="form-row">
-            <input type="text" class="field-name-input" placeholder="字段名">
-            <select class="field-type-select" onchange="handleTypeChange(this)">
-                ${typeOptions}
-            </select>
-            <input type="hidden" class="field-ref-input" value="">
-            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="field-array-checkbox">
-                数组
-            </label>
-            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="field-required-checkbox">
-                必填
-            </label>
-            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
-                <i class="fas fa-times"></i>
-            </button>
+    // 这个函数已经不需要了,统一使用addFieldRow
+    addFieldRow();
+}
         </div>
         <input type="text" class="field-desc-input" placeholder="字段描述（可选）">
     `;
@@ -753,6 +667,165 @@ async function deleteCustomType(id) {
 }
 
 // ========== 接口管理 ==========
+
+// 接口表单状态
+let currentInterfaceId = null;
+
+// 显示接口表单
+async function showInterfaceForm(interfaceId = null) {
+    const appId = document.getElementById('global-app-select').value;
+    if (!appId) {
+        showToast('请先选择一个应用', 'warning');
+        return;
+    }
+    
+    // 确保已加载自定义类型
+    if (!state.customTypes || state.customTypes.length === 0) {
+        try {
+            const types = await apiRequest(`/custom-types?app_id=${appId}`);
+            state.customTypes = types;
+        } catch (error) {
+            console.error('加载自定义类型失败:', error);
+        }
+    }
+    
+    currentInterfaceId = interfaceId;
+    document.getElementById('interface-list-view').style.display = 'none';
+    document.getElementById('interface-form-view').style.display = 'block';
+    
+    // 清空参数容器
+    document.getElementById('params-container').innerHTML = '';
+    
+    if (interfaceId) {
+        // 编辑模式
+        const iface = state.interfaces.find(i => i.id === interfaceId);
+        if (iface) {
+            document.getElementById('interface-form-title').textContent = '编辑接口';
+            document.getElementById('interface-form-subtitle').textContent = '修改接口信息';
+            document.getElementById('interface-name').value = iface.name;
+            document.getElementById('interface-description').value = iface.description || '';
+            document.getElementById('interface-method').value = iface.method;
+            document.getElementById('interface-protocol').value = iface.protocol;
+            document.getElementById('interface-url').value = iface.url;
+            document.getElementById('interface-auth').value = iface.auth_type;
+            
+            // 加载参数
+            if (iface.parameters && iface.parameters.length > 0) {
+                iface.parameters.forEach(param => {
+                    addParamRow(param);
+                });
+            }
+        }
+    } else {
+        // 创建模式
+        document.getElementById('interface-form-title').textContent = '创建接口';
+        document.getElementById('interface-form-subtitle').textContent = '配置接口信息和参数';
+        document.getElementById('interface-name').value = '';
+        document.getElementById('interface-description').value = '';
+        document.getElementById('interface-method').value = 'GET';
+        document.getElementById('interface-protocol').value = 'http';
+        document.getElementById('interface-url').value = '';
+        document.getElementById('interface-auth').value = 'none';
+    }
+}
+
+// 隐藏接口表单
+function hideInterfaceForm() {
+    document.getElementById('interface-list-view').style.display = 'block';
+    document.getElementById('interface-form-view').style.display = 'none';
+    currentInterfaceId = null;
+}
+
+// 创建接口按钮
+document.getElementById('create-interface-btn').addEventListener('click', () => {
+    showInterfaceForm();
+});
+
+// 接口表单返回按钮
+document.getElementById('interface-form-back').addEventListener('click', hideInterfaceForm);
+document.getElementById('interface-form-cancel').addEventListener('click', hideInterfaceForm);
+
+// 接口表单提交
+document.getElementById('interface-form-submit').addEventListener('click', async () => {
+    const appId = document.getElementById('global-app-select').value;
+    const name = document.getElementById('interface-name').value;
+    const description = document.getElementById('interface-description').value;
+    const method = document.getElementById('interface-method').value;
+    const protocol = document.getElementById('interface-protocol').value;
+    const url = document.getElementById('interface-url').value;
+    const auth_type = document.getElementById('interface-auth').value;
+    
+    if (!name || !url) {
+        showToast('请填写必填字段', 'error');
+        return;
+    }
+    
+    const parameters = [];
+    document.querySelectorAll('.param-row').forEach(row => {
+        const paramName = row.querySelector('.param-name-input').value;
+        const paramType = row.querySelector('.param-type-select').value;
+        const paramRef = row.querySelector('.param-ref-input')?.value;
+        const paramLocation = row.querySelector('.param-location-select').value;
+        const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
+        const paramRequired = row.querySelector('.param-required-checkbox').checked;
+        
+        if (paramName) {
+            const param = {
+                name: paramName,
+                type: paramType,
+                location: paramLocation,
+                is_array: paramIsArray,
+                required: paramRequired
+            };
+            
+            if (paramType === 'custom' && paramRef) {
+                param.ref = parseInt(paramRef);
+            }
+            
+            parameters.push(param);
+        }
+    });
+    
+    try {
+        if (currentInterfaceId) {
+            // 更新
+            await apiRequest(`/interfaces/${currentInterfaceId}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    name,
+                    description,
+                    method,
+                    protocol,
+                    url,
+                    auth_type,
+                    parameters
+                })
+            });
+            showToast('接口更新成功', 'success');
+        } else {
+            // 创建
+            await apiRequest('/interfaces', {
+                method: 'POST',
+                body: JSON.stringify({
+                    app_id: parseInt(appId),
+                    name,
+                    description,
+                    method,
+                    protocol,
+                    url,
+                    auth_type,
+                    enabled: true,
+                    parameters
+                })
+            });
+            showToast('接口创建成功', 'success');
+        }
+        hideInterfaceForm();
+        loadInterfaces();
+    } catch (error) {
+        showToast('操作失败: ' + error.message, 'error');
+    }
+});
 
 async function loadInterfaces() {
     const appId = document.getElementById('global-app-select').value;
@@ -860,223 +933,51 @@ function getMethodColor(method) {
     return colors[method] || 'secondary';
 }
 
-// 创建接口
-document.getElementById('create-interface-btn').addEventListener('click', async () => {
-    const appId = document.getElementById('global-app-select').value;
-    if (!appId) {
-        showToast('请先选择一个应用', 'warning');
-        return;
-    }
-    
-    // 确保已加载自定义类型
-    if (!state.customTypes || state.customTypes.length === 0) {
-        try {
-            const types = await apiRequest(`/custom-types?app_id=${appId}`);
-            state.customTypes = types;
-        } catch (error) {
-            console.error('加载自定义类型失败:', error);
-        }
-    }
-    
-    showModal('创建接口', `
-        <div class="form-group">
-            <label class="required">接口名称</label>
-            <input type="text" id="interface-name" placeholder="例如: GetUser">
-        </div>
-        <div class="form-group">
-            <label>接口描述</label>
-            <textarea id="interface-description" rows="2" placeholder="描述接口的功能"></textarea>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label class="required">HTTP 方法</label>
-                <select id="interface-method">
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                    <option value="DELETE">DELETE</option>
-                    <option value="PATCH">PATCH</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="required">协议</label>
-                <select id="interface-protocol">
-                    <option value="http">HTTP</option>
-                </select>
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="required">URL</label>
-            <input type="text" id="interface-url" placeholder="https://api.example.com/users">
-        </div>
-        <div class="form-group">
-            <label>认证类型</label>
-            <select id="interface-auth">
-                <option value="none">无认证</option>
-                <option value="bearer">Bearer Token</option>
-                <option value="basic">Basic Auth</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label>参数定义</label>
-            <div id="params-container"></div>
-            <button type="button" class="btn btn-secondary mt-2" onclick="addParamRow()">
-                <i class="fas fa-plus"></i> 添加参数
-            </button>
-        </div>
-    `, async () => {
-        const name = document.getElementById('interface-name').value;
-        const description = document.getElementById('interface-description').value;
-        const method = document.getElementById('interface-method').value;
-        const protocol = document.getElementById('interface-protocol').value;
-        const url = document.getElementById('interface-url').value;
-        const auth_type = document.getElementById('interface-auth').value;
-        
-        if (!name || !url) {
-            showToast('请填写必填字段', 'error');
-            return;
-        }
-        
-        const parameters = [];
-        document.querySelectorAll('.param-row').forEach(row => {
-            const paramName = row.querySelector('.param-name-input').value;
-            const paramType = row.querySelector('.param-type-select').value;
-            const paramRef = row.querySelector('.param-ref-input')?.value;
-            const paramLocation = row.querySelector('.param-location-select').value;
-            const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
-            const paramRequired = row.querySelector('.param-required-checkbox').checked;
-            
-            if (paramName) {
-                const param = {
-                    name: paramName,
-                    type: paramType,
-                    location: paramLocation,
-                    is_array: paramIsArray,
-                    required: paramRequired
-                };
-                
-                // 如果是自定义类型，添加引用
-                if (paramType === 'custom' && paramRef) {
-                    param.ref = parseInt(paramRef);
-                }
-                
-                parameters.push(param);
-            }
-        });
-        
-        try {
-            await apiRequest('/interfaces', {
-                method: 'POST',
-                body: JSON.stringify({
-                    app_id: parseInt(appId),
-                    name,
-                    description,
-                    method,
-                    protocol,
-                    url,
-                    auth_type,
-                    enabled: true,
-                    parameters
-                })
-            });
-            showToast('接口创建成功', 'success');
-            loadInterfaces();
-        } catch (error) {
-            showToast('创建失败: ' + error.message, 'error');
-        }
-    });
-});
-
-function addParamRow() {
+function addParamRow(paramData = null) {
     const container = document.getElementById('params-container');
     const row = document.createElement('div');
     row.className = 'param-row mb-2';
     
     // 构建类型选项（包含自定义类型）
-    let typeOptions = `
-        <option value="string">string</option>
-        <option value="number">number</option>
-        <option value="boolean">boolean</option>
-    `;
-    
-    // 添加当前应用的自定义类型
-    if (state.customTypes && state.customTypes.length > 0) {
-        typeOptions += '<optgroup label="自定义类型">';
-        state.customTypes.forEach(type => {
-            typeOptions += `<option value="custom" data-ref="${type.id}">${type.name}</option>`;
-        });
-        typeOptions += '</optgroup>';
-    }
-    
-    row.innerHTML = `
-        <div class="form-row">
-            <input type="text" class="param-name-input" placeholder="参数名">
-            <select class="param-type-select" onchange="handleTypeChange(this)">
-                ${typeOptions}
-            </select>
-            <input type="hidden" class="param-ref-input" value="">
-            <select class="param-location-select">
-                <option value="query">query</option>
-                <option value="header">header</option>
-                <option value="body">body</option>
-                <option value="path">path</option>
-            </select>
-            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="param-array-checkbox">
-                数组
-            </label>
-            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="param-required-checkbox">
-                必填
-            </label>
-            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-    `;
-    container.appendChild(row);
-}
-
-function addEditParamRow() {
-    const container = document.getElementById('edit-params-container');
-    const row = document.createElement('div');
-    row.className = 'param-row mb-2';
-    
-    // 构建类型选项（包含自定义类型）
-    let typeOptions = `
-        <option value="string">string</option>
-        <option value="number">number</option>
-        <option value="boolean">boolean</option>
-    `;
-    
-    // 添加当前应用的自定义类型
-    if (state.customTypes && state.customTypes.length > 0) {
-        typeOptions += '<optgroup label="自定义类型">';
-        state.customTypes.forEach(type => {
-            typeOptions += `<option value="custom" data-ref="${type.id}">${type.name}</option>`;
-        });
-        typeOptions += '</optgroup>';
-    }
+    const buildTypeOptions = () => {
+        let options = `
+            <option value="string" ${paramData && paramData.type === 'string' ? 'selected' : ''}>string</option>
+            <option value="number" ${paramData && paramData.type === 'number' ? 'selected' : ''}>number</option>
+            <option value="boolean" ${paramData && paramData.type === 'boolean' ? 'selected' : ''}>boolean</option>
+        `;
+        
+        // 添加当前应用的自定义类型
+        if (state.customTypes && state.customTypes.length > 0) {
+            options += '<optgroup label="自定义类型">';
+            state.customTypes.forEach(type => {
+                const isSelected = paramData && paramData.type === 'custom' && paramData.ref === type.id;
+                options += `<option value="custom" data-ref="${type.id}" ${isSelected ? 'selected' : ''}>${type.name}</option>`;
+            });
+            options += '</optgroup>';
+        }
+        
+        return options;
+    };
     
     row.innerHTML = `
         <div class="form-row">
-            <input type="text" class="param-name-input" placeholder="参数名">
+            <input type="text" class="param-name-input" placeholder="参数名" value="${paramData ? paramData.name : ''}">
             <select class="param-type-select" onchange="handleTypeChange(this)">
-                ${typeOptions}
+                ${buildTypeOptions()}
             </select>
-            <input type="hidden" class="param-ref-input" value="">
+            <input type="hidden" class="param-ref-input" value="${paramData && paramData.ref ? paramData.ref : ''}">
             <select class="param-location-select">
-                <option value="query">query</option>
-                <option value="header">header</option>
-                <option value="body">body</option>
-                <option value="path">path</option>
+                <option value="query" ${paramData && paramData.location === 'query' ? 'selected' : ''}>query</option>
+                <option value="header" ${paramData && paramData.location === 'header' ? 'selected' : ''}>header</option>
+                <option value="body" ${paramData && paramData.location === 'body' ? 'selected' : ''}>body</option>
+                <option value="path" ${paramData && paramData.location === 'path' ? 'selected' : ''}>path</option>
             </select>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="param-array-checkbox">
+                <input type="checkbox" class="param-array-checkbox" ${paramData && paramData.is_array ? 'checked' : ''}>
                 数组
             </label>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="param-required-checkbox">
+                <input type="checkbox" class="param-required-checkbox" ${paramData && paramData.required ? 'checked' : ''}>
                 必填
             </label>
             <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
@@ -1131,174 +1032,12 @@ function viewInterface(id) {
 }
 
 async function editInterface(id) {
-    const iface = state.interfaces.find(i => i.id === id);
-    if (!iface) return;
-    
-    // 确保已加载自定义类型
-    const appId = document.getElementById('global-app-select').value;
-    if (appId && (!state.customTypes || state.customTypes.length === 0)) {
-        try {
-            const types = await apiRequest(`/custom-types?app_id=${appId}`);
-            state.customTypes = types;
-        } catch (error) {
-            console.error('加载自定义类型失败:', error);
-        }
-    }
-    
-    // 构建类型选项（包含自定义类型）
-    const buildParamTypeOptions = (currentType, currentRef) => {
-        let options = `
-            <option value="string" ${currentType === 'string' ? 'selected' : ''}>string</option>
-            <option value="number" ${currentType === 'number' ? 'selected' : ''}>number</option>
-            <option value="boolean" ${currentType === 'boolean' ? 'selected' : ''}>boolean</option>
-        `;
-        
-        if (state.customTypes && state.customTypes.length > 0) {
-            options += '<optgroup label="自定义类型">';
-            state.customTypes.forEach(type => {
-                const isSelected = currentType === 'custom' && currentRef === type.id;
-                options += `<option value="custom" data-ref="${type.id}" ${isSelected ? 'selected' : ''}>${type.name}</option>`;
-            });
-            options += '</optgroup>';
-        }
-        
-        return options;
-    };
-    
-    showModal('编辑接口', `
-        <div class="form-group">
-            <label>接口名称</label>
-            <input type="text" id="edit-interface-name" value="${iface.name}">
-        </div>
-        <div class="form-group">
-            <label>接口描述</label>
-            <textarea id="edit-interface-description" rows="2">${iface.description || ''}</textarea>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label>HTTP 方法</label>
-                <select id="edit-interface-method">
-                    <option value="GET" ${iface.method === 'GET' ? 'selected' : ''}>GET</option>
-                    <option value="POST" ${iface.method === 'POST' ? 'selected' : ''}>POST</option>
-                    <option value="PUT" ${iface.method === 'PUT' ? 'selected' : ''}>PUT</option>
-                    <option value="DELETE" ${iface.method === 'DELETE' ? 'selected' : ''}>DELETE</option>
-                    <option value="PATCH" ${iface.method === 'PATCH' ? 'selected' : ''}>PATCH</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>协议</label>
-                <select id="edit-interface-protocol">
-                    <option value="http" ${iface.protocol === 'http' ? 'selected' : ''}>HTTP</option>
-                </select>
-            </div>
-        </div>
-        <div class="form-group">
-            <label>URL</label>
-            <input type="text" id="edit-interface-url" value="${iface.url}">
-        </div>
-        <div class="form-group">
-            <label>认证类型</label>
-            <select id="edit-interface-auth">
-                <option value="none" ${iface.auth_type === 'none' ? 'selected' : ''}>无认证</option>
-                <option value="bearer" ${iface.auth_type === 'bearer' ? 'selected' : ''}>Bearer Token</option>
-                <option value="basic" ${iface.auth_type === 'basic' ? 'selected' : ''}>Basic Auth</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label>参数定义</label>
-            <div id="edit-params-container">
-                ${iface.parameters?.map(param => `
-                    <div class="param-row mb-2">
-                        <div class="form-row">
-                            <input type="text" class="param-name-input" value="${param.name}" placeholder="参数名">
-                            <select class="param-type-select" onchange="handleTypeChange(this)">
-                                ${buildParamTypeOptions(param.type, param.ref)}
-                            </select>
-                            <input type="hidden" class="param-ref-input" value="${param.ref || ''}">
-                            <select class="param-location-select">
-                                <option value="query" ${param.location === 'query' ? 'selected' : ''}>query</option>
-                                <option value="header" ${param.location === 'header' ? 'selected' : ''}>header</option>
-                                <option value="body" ${param.location === 'body' ? 'selected' : ''}>body</option>
-                                <option value="path" ${param.location === 'path' ? 'selected' : ''}>path</option>
-                            </select>
-                            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                                <input type="checkbox" class="param-array-checkbox" ${param.is_array ? 'checked' : ''}>
-                                数组
-                            </label>
-                            <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                                <input type="checkbox" class="param-required-checkbox" ${param.required ? 'checked' : ''}>
-                                必填
-                            </label>
-                            <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                    </div>
-                `).join('') || ''}
-            </div>
-            <button type="button" class="btn btn-secondary mt-2" onclick="addEditParamRow()">
-                <i class="fas fa-plus"></i> 添加参数
-            </button>
-        </div>
-    `, async () => {
-        const name = document.getElementById('edit-interface-name').value;
-        const description = document.getElementById('edit-interface-description').value;
-        const method = document.getElementById('edit-interface-method').value;
-        const protocol = document.getElementById('edit-interface-protocol').value;
-        const url = document.getElementById('edit-interface-url').value;
-        const auth_type = document.getElementById('edit-interface-auth').value;
-        
-        if (!name || !url) {
-            showToast('请填写必填字段', 'error');
-            return;
-        }
-        
-        const parameters = [];
-        document.querySelectorAll('#edit-params-container .param-row').forEach(row => {
-            const paramName = row.querySelector('.param-name-input').value;
-            const paramType = row.querySelector('.param-type-select').value;
-            const paramRef = row.querySelector('.param-ref-input')?.value;
-            const paramLocation = row.querySelector('.param-location-select').value;
-            const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
-            const paramRequired = row.querySelector('.param-required-checkbox').checked;
-            
-            if (paramName) {
-                const param = {
-                    name: paramName,
-                    type: paramType,
-                    location: paramLocation,
-                    is_array: paramIsArray,
-                    required: paramRequired
-                };
-                
-                // 如果是自定义类型，添加引用
-                if (paramType === 'custom' && paramRef) {
-                    param.ref = parseInt(paramRef);
-                }
-                
-                parameters.push(param);
-            }
-        });
-        
-        try {
-            await apiRequest(`/interfaces/${id}`, {
-                method: 'PUT',
-                body: JSON.stringify({
-                    name,
-                    description,
-                    method,
-                    protocol,
-                    url,
-                    auth_type,
-                    parameters
-                })
-            });
-            showToast('接口更新成功', 'success');
-            loadInterfaces();
-        } catch (error) {
-            showToast('更新失败: ' + error.message, 'error');
-        }
-    });
+    await showInterfaceForm(id);
+}
+
+function addEditParamRow() {
+    // 这个函数已经不需要了,统一使用addParamRow
+    addParamRow();
 }
 
 async function deleteInterface(id) {

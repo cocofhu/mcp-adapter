@@ -47,87 +47,235 @@
         <main class="main-content">
             <!-- 应用管理页面 -->
             <div class="tab-content active" id="applications-tab">
-                <div class="page-header">
-                    <div>
-                        <h1><i class="fas fa-folder-open"></i> 应用管理</h1>
-                        <p>管理您的应用和服务</p>
+                <!-- 应用列表视图 -->
+                <div id="app-list-view">
+                    <div class="page-header">
+                        <div>
+                            <h1><i class="fas fa-folder-open"></i> 应用管理</h1>
+                            <p>管理您的应用和服务</p>
+                        </div>
+                        <button class="btn btn-primary" id="create-app-btn">
+                            <i class="fas fa-plus"></i> 创建应用
+                        </button>
                     </div>
-                    <button class="btn btn-primary" id="create-app-btn">
-                        <i class="fas fa-plus"></i> 创建应用
-                    </button>
+
+                    <div class="search-bar">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="搜索应用..." id="app-search">
+                    </div>
+
+                    <div class="cards-grid" id="applications-grid">
+                        <!-- 应用卡片动态生成 -->
+                    </div>
                 </div>
 
-                <div class="search-bar">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="搜索应用..." id="app-search">
-                </div>
+                <!-- 应用编辑/创建视图 -->
+                <div id="app-form-view" style="display: none;">
+                    <div class="page-header">
+                        <div>
+                            <h1><i class="fas fa-folder-open"></i> <span id="app-form-title">创建应用</span></h1>
+                            <p id="app-form-subtitle">填写应用信息</p>
+                        </div>
+                        <button class="btn btn-secondary" id="app-form-back">
+                            <i class="fas fa-arrow-left"></i> 返回列表
+                        </button>
+                    </div>
 
-                <div class="cards-grid" id="applications-grid">
-                    <!-- 应用卡片动态生成 -->
+                    <div class="form-container">
+                        <div class="form-group">
+                            <label class="required">应用名称</label>
+                            <input type="text" id="app-name" placeholder="例如: 我的API服务">
+                        </div>
+                        <div class="form-group">
+                            <label>应用描述</label>
+                            <textarea id="app-description" rows="3" placeholder="描述应用的功能"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label class="required">应用路径</label>
+                            <input type="text" id="app-path" placeholder="例如: my-api">
+                        </div>
+                        <div class="form-group">
+                            <label class="required">协议类型</label>
+                            <select id="app-protocol">
+                                <option value="sse">SSE</option>
+                                <option value="http">HTTP</option>
+                            </select>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn btn-secondary" id="app-form-cancel">取消</button>
+                            <button class="btn btn-primary" id="app-form-submit">保存</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- 自定义类型管理页面 -->
             <div class="tab-content" id="custom-types-tab">
-                <div class="page-header">
-                    <div>
-                        <h1><i class="fas fa-shapes"></i> 自定义类型</h1>
-                        <p>定义可复用的数据类型</p>
+                <!-- 类型列表视图 -->
+                <div id="type-list-view">
+                    <div class="page-header">
+                        <div>
+                            <h1><i class="fas fa-shapes"></i> 自定义类型</h1>
+                            <p>定义可复用的数据类型</p>
+                        </div>
+                        <button class="btn btn-primary" id="create-type-btn">
+                            <i class="fas fa-plus"></i> 创建类型
+                        </button>
                     </div>
-                    <button class="btn btn-primary" id="create-type-btn">
-                        <i class="fas fa-plus"></i> 创建类型
-                    </button>
+
+                    <div class="alert alert-info" id="no-app-alert" style="display: none;">
+                        <i class="fas fa-info-circle"></i>
+                        请先在侧边栏选择一个应用
+                    </div>
+
+                    <div class="search-bar">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="搜索类型..." id="type-search">
+                    </div>
+
+                    <div class="cards-grid" id="types-grid">
+                        <!-- 类型卡片动态生成 -->
+                    </div>
                 </div>
 
-                <div class="alert alert-info" id="no-app-alert" style="display: none;">
-                    <i class="fas fa-info-circle"></i>
-                    请先在侧边栏选择一个应用
-                </div>
+                <!-- 类型编辑/创建视图 -->
+                <div id="type-form-view" style="display: none;">
+                    <div class="page-header">
+                        <div>
+                            <h1><i class="fas fa-shapes"></i> <span id="type-form-title">创建类型</span></h1>
+                            <p id="type-form-subtitle">定义数据类型和字段</p>
+                        </div>
+                        <button class="btn btn-secondary" id="type-form-back">
+                            <i class="fas fa-arrow-left"></i> 返回列表
+                        </button>
+                    </div>
 
-                <div class="search-bar">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="搜索类型..." id="type-search">
-                </div>
-
-                <div class="cards-grid" id="types-grid">
-                    <!-- 类型卡片动态生成 -->
+                    <div class="form-container">
+                        <div class="form-group">
+                            <label class="required">类型名称</label>
+                            <input type="text" id="type-name" placeholder="例如: User">
+                        </div>
+                        <div class="form-group">
+                            <label>类型描述</label>
+                            <textarea id="type-description" rows="2" placeholder="描述这个类型的用途"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>字段定义</label>
+                            <div id="fields-container"></div>
+                            <button type="button" class="btn btn-secondary mt-2" onclick="addFieldRow()">
+                                <i class="fas fa-plus"></i> 添加字段
+                            </button>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn btn-secondary" id="type-form-cancel">取消</button>
+                            <button class="btn btn-primary" id="type-form-submit">保存</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- 接口管理页面 -->
             <div class="tab-content" id="interfaces-tab">
-                <div class="page-header">
-                    <div>
-                        <h1><i class="fas fa-plug"></i> 接口管理</h1>
-                        <p>管理 HTTP 接口和参数</p>
+                <!-- 接口列表视图 -->
+                <div id="interface-list-view">
+                    <div class="page-header">
+                        <div>
+                            <h1><i class="fas fa-plug"></i> 接口管理</h1>
+                            <p>管理 HTTP 接口和参数</p>
+                        </div>
+                        <button class="btn btn-primary" id="create-interface-btn">
+                            <i class="fas fa-plus"></i> 创建接口
+                        </button>
                     </div>
-                    <button class="btn btn-primary" id="create-interface-btn">
-                        <i class="fas fa-plus"></i> 创建接口
-                    </button>
-                </div>
 
-                <div class="alert alert-info" id="no-app-alert-interface" style="display: none;">
-                    <i class="fas fa-info-circle"></i>
-                    请先在侧边栏选择一个应用
-                </div>
-
-                <div class="filters">
-                    <div class="search-bar">
-                        <i class="fas fa-search"></i>
-                        <input type="text" placeholder="搜索接口..." id="interface-search">
+                    <div class="alert alert-info" id="no-app-alert-interface" style="display: none;">
+                        <i class="fas fa-info-circle"></i>
+                        请先在侧边栏选择一个应用
                     </div>
-                    <select id="method-filter">
-                        <option value="">所有方法</option>
-                        <option value="GET">GET</option>
-                        <option value="POST">POST</option>
-                        <option value="PUT">PUT</option>
-                        <option value="DELETE">DELETE</option>
-                        <option value="PATCH">PATCH</option>
-                    </select>
+
+                    <div class="filters">
+                        <div class="search-bar">
+                            <i class="fas fa-search"></i>
+                            <input type="text" placeholder="搜索接口..." id="interface-search">
+                        </div>
+                        <select id="method-filter">
+                            <option value="">所有方法</option>
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                            <option value="PATCH">PATCH</option>
+                        </select>
+                    </div>
+
+                    <div class="cards-grid" id="interfaces-grid">
+                        <!-- 接口卡片动态生成 -->
+                    </div>
                 </div>
 
-                <div class="cards-grid" id="interfaces-grid">
-                    <!-- 接口卡片动态生成 -->
+                <!-- 接口编辑/创建视图 -->
+                <div id="interface-form-view" style="display: none;">
+                    <div class="page-header">
+                        <div>
+                            <h1><i class="fas fa-plug"></i> <span id="interface-form-title">创建接口</span></h1>
+                            <p id="interface-form-subtitle">配置接口信息和参数</p>
+                        </div>
+                        <button class="btn btn-secondary" id="interface-form-back">
+                            <i class="fas fa-arrow-left"></i> 返回列表
+                        </button>
+                    </div>
+
+                    <div class="form-container">
+                        <div class="form-group">
+                            <label class="required">接口名称</label>
+                            <input type="text" id="interface-name" placeholder="例如: GetUser">
+                        </div>
+                        <div class="form-group">
+                            <label>接口描述</label>
+                            <textarea id="interface-description" rows="2" placeholder="描述接口的功能"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="required">HTTP 方法</label>
+                                <select id="interface-method">
+                                    <option value="GET">GET</option>
+                                    <option value="POST">POST</option>
+                                    <option value="PUT">PUT</option>
+                                    <option value="DELETE">DELETE</option>
+                                    <option value="PATCH">PATCH</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="required">协议</label>
+                                <select id="interface-protocol">
+                                    <option value="http">HTTP</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="required">URL</label>
+                            <input type="text" id="interface-url" placeholder="https://api.example.com/users">
+                        </div>
+                        <div class="form-group">
+                            <label>认证类型</label>
+                            <select id="interface-auth">
+                                <option value="none">无认证</option>
+                                <option value="bearer">Bearer Token</option>
+                                <option value="basic">Basic Auth</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>参数定义</label>
+                            <div id="params-container"></div>
+                            <button type="button" class="btn btn-secondary mt-2" onclick="addParamRow()">
+                                <i class="fas fa-plus"></i> 添加参数
+                            </button>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn btn-secondary" id="interface-form-cancel">取消</button>
+                            <button class="btn btn-primary" id="interface-form-submit">保存</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
