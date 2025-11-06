@@ -2,10 +2,12 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
+	"mcp-adapter/backend/service"
 	"net/http"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -98,45 +100,29 @@ func addTool(iface *models.Interface, app *models.Application) {
 			log.Printf("tool %s in %s already exists, skipped!", iface.Name, app.Name)
 			return
 		}
-
 		// 从数据库获取接口参数
 		db := database.GetDB()
 		var params []models.InterfaceParameter
-		db.Where("interface_id = ?", iface.ID).Find(&params)
-
-		options := make([]mcp.ToolOption, 0)
-		options = append(options, mcp.WithDescription(iface.Description))
-
-		for _, p := range params {
-			pos := make([]mcp.PropertyOption, 0)
-			pos = append(pos, mcp.Description(p.Description))
-			if p.Required {
-				pos = append(pos, mcp.Required())
-			}
-
-			// 根据类型添加参数
-			switch p.Type {
-			case "string":
-				options = append(options, mcp.WithString(p.Name, pos...))
-			case "number":
-				options = append(options, mcp.WithNumber(p.Name, pos...))
-			case "boolean":
-				options = append(options, mcp.WithBoolean(p.Name, pos...))
-			case "custom":
-				// 自定义类型暂时作为 object 处理
-				// TODO: 可以递归展开自定义类型的字段
-				options = append(options, mcp.WithString(p.Name, pos...))
-			default:
-				log.Printf("Unknown parameter type: %s, using string as default", p.Type)
-				options = append(options, mcp.WithString(p.Name, pos...))
-			}
+		if db.Where("interface_id = ?", iface.ID).Find(&params).Error != nil {
+			log.Printf("Error getting interface parameters for tool %s", iface.Name)
+			return
 		}
+		schema, err := service.BuildMcpInputSchemaByInterface(iface.ID)
+		if err != nil {
+			log.Printf("Error building input schema for tool %s: %v", iface.Name, err)
+			return
+		}
+		marshal, err := json.Marshal(schema)
+		if err != nil {
+			log.Printf("Error marshaling input schema for tool %s: %v", iface.Name, err)
+			return
+		}
+		log.Printf("Input schema for tool %s: %s", iface.Name, string(marshal))
 
-		newTool := mcp.NewTool(iface.Name, options...)
+		newTool := mcp.NewToolWithRawSchema(iface.Name, iface.Description, marshal)
 
 		s.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := req.GetArguments()
-
 			data, code, err := CallHTTPInterface(ctx, iface, args)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
