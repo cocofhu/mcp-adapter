@@ -758,6 +758,8 @@ document.getElementById('interface-form-submit').addEventListener('click', async
         const paramLocation = row.querySelector('.param-location-select').value;
         const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
         const paramRequired = row.querySelector('.param-required-checkbox').checked;
+        const paramDefaultValue = row.querySelector('.param-default-input')?.value;
+        const paramDescription = row.querySelector('.param-desc-input')?.value;
         
         if (paramName) {
             const param = {
@@ -770,6 +772,14 @@ document.getElementById('interface-form-submit').addEventListener('click', async
             
             if (paramType === 'custom' && paramRef) {
                 param.ref = parseInt(paramRef);
+            }
+            
+            if (paramDefaultValue) {
+                param.default_value = paramDefaultValue;
+            }
+            
+            if (paramDescription) {
+                param.description = paramDescription;
             }
             
             parameters.push(param);
@@ -974,6 +984,10 @@ function addParamRow(paramData = null) {
                 <i class="fas fa-times"></i>
             </button>
         </div>
+        <div class="form-row" style="margin-top: 4px;">
+            <input type="text" class="param-default-input" placeholder="默认值（可选）" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1;">
+            <input type="text" class="param-desc-input" placeholder="参数描述（可选）" value="${paramData && paramData.description ? paramData.description : ''}" style="flex: 1;">
+        </div>
     `;
     container.appendChild(row);
 }
@@ -1011,7 +1025,9 @@ function viewInterface(id) {
                                     <span>${getParamTypeDisplay(param)}${param.is_array ? '[]' : ''}</span>
                                     <span>${param.location}</span>
                                     ${param.required ? '<span class="badge-danger">必填</span>' : ''}
+                                    ${param.default_value ? `<span>默认值: ${param.default_value}</span>` : ''}
                                 </div>
+                                ${param.description ? `<div style="margin-top: 4px; color: #666;">${param.description}</div>` : ''}
                             </div>
                         </div>
                     `).join('')}
