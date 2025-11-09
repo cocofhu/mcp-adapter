@@ -7,21 +7,24 @@ import (
 	"log"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
-	"mcp-adapter/backend/service"
 	"net/http"
+	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
+var sseServer sync.Map
 var event chan Event
-var sseServer map[string]*Server
+
+type EventCode int
 
 const (
-	AddTool int = iota
-	RemoveTool
-	AddApplication
-	RemoveApplication
+	AddToolEvent           EventCode = iota // 工具添加事件
+	RemoveToolEvent                         // 工具移除事件
+	AddApplicationEvent                     // 应用添加事件
+	RemoveApplicationEvent                  // 应用移除事件
+	ToolListChanged                         // 工具列表变更事件
 )
 
 type Server struct {
@@ -33,11 +36,15 @@ type Server struct {
 type Event struct {
 	Interface *models.Interface
 	App       *models.Application
-	Code      int
+	Code      EventCode
+}
+
+func SendEvent(evt Event) {
+	log.Printf("Sent event: %v", evt)
+	event <- evt
 }
 
 func InitServer() {
-	sseServer = make(map[string]*Server)
 	event = make(chan Event, 16)
 	var apps []models.Application
 	db := database.GetDB()
@@ -58,7 +65,7 @@ func InitServer() {
 			return
 		}
 		mcpServer := server.NewMCPServer(app.Name, "1.0.0")
-		sseServer[app.Path] = &Server{
+		sseServer.Store(app.Path, &Server{
 			protocol: app.Protocol,
 			path:     app.Path,
 			server:   mcpServer,
@@ -67,7 +74,7 @@ func InitServer() {
 				server.WithSSEEndpoint(fmt.Sprintf("/sse/%s", app.Path)),
 				server.WithMessageEndpoint(fmt.Sprintf("/message/%s", app.Path)),
 			),
-		}
+		})
 		for _, iface := range interfaces {
 			addTool(&iface, &app)
 		}
@@ -77,24 +84,27 @@ func InitServer() {
 	go func() {
 		for {
 			evt := <-event
-			if evt.Code == AddTool {
+			if evt.Code == AddToolEvent {
 				addTool(evt.Interface, evt.App)
-			} else if evt.Code == RemoveTool {
+			} else if evt.Code == RemoveToolEvent {
 				removeTool(evt.Interface, evt.App)
+			} else if evt.Code == ToolListChanged {
+				toolChanged(evt.Interface, evt.App)
 			}
 		}
 	}()
 }
 
 func GetServerImpl(path string) http.Handler {
-	if s, ok := sseServer[path]; ok {
-		return s.impl
+	if s, ok := sseServer.Load(path); ok {
+		return s.(*Server).impl
 	}
 	return nil
 }
 
 func addTool(iface *models.Interface, app *models.Application) {
-	if s, ok := sseServer[app.Path]; ok {
+	if s, ok := sseServer.Load(app.Path); ok {
+		s := s.(*Server)
 		tool := s.server.GetTool(iface.Name)
 		if tool != nil {
 			log.Printf("tool %s in %s already exists, skipped!", iface.Name, app.Name)
@@ -107,7 +117,7 @@ func addTool(iface *models.Interface, app *models.Application) {
 			log.Printf("Error getting interface parameters for tool %s", iface.Name)
 			return
 		}
-		schema, err := service.BuildMcpInputSchemaByInterface(iface.ID)
+		schema, err := BuildMcpInputSchemaByInterface(iface.ID)
 		if err != nil {
 			log.Printf("Error building input schema for tool %s: %v", iface.Name, err)
 			return
@@ -118,9 +128,7 @@ func addTool(iface *models.Interface, app *models.Application) {
 			return
 		}
 		log.Printf("Input schema for tool %s: %s", iface.Name, string(marshal))
-
 		newTool := mcp.NewToolWithRawSchema(iface.Name, iface.Description, marshal)
-
 		s.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := req.GetArguments()
 			data, code, err := CallHTTPInterface(ctx, iface, args)
@@ -133,11 +141,25 @@ func addTool(iface *models.Interface, app *models.Application) {
 			return mcp.NewToolResultText(string(data)), nil
 		})
 		log.Printf("Added tool: %s", iface.Name)
+	} else {
+		log.Printf("Warning Skipping add tool %s in %s not found!", iface.Name, app.Name)
 	}
 }
 
 func removeTool(iface *models.Interface, app *models.Application) {
-	if s, ok := sseServer[app.Path]; ok {
-		s.server.DeleteTools(iface.Name)
+	if s, ok := sseServer.Load(app.Path); ok {
+		s.(*Server).server.DeleteTools(iface.Name)
+		log.Printf("Removed tool: %s", iface.Name)
+	} else {
+		log.Printf("Warning Skipping remove tool %s in %s not found!", iface.Name, app.Name)
+	}
+}
+
+func toolChanged(_ *models.Interface, app *models.Application) {
+	if s, ok := sseServer.Load(app.Path); ok {
+		s.(*Server).server.SendNotificationToAllClients(mcp.MethodNotificationToolsListChanged, nil)
+		log.Printf("Tool changed notification sent: %s", app.Name)
+	} else {
+		log.Printf("Warning Skipping toolChanged in %s not found!", app.Name)
 	}
 }

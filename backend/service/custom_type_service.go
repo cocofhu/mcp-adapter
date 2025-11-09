@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"mcp-adapter/backend/adapter"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"time"
@@ -416,6 +417,24 @@ func UpdateCustomType(req UpdateCustomTypeRequest) (CustomTypeResponse, error) {
 		tx.Where("custom_type_id = ?", existing.ID).Find(&fields)
 	}
 	tx.Commit()
+	// 这里还需要向上递归寻找间接引用找到所有的依赖改类型的应用发送 ToolListChanged 通知
+	// 举例来说 Type1 里有一个 Type2 的字段，Type2 里有一个 Type3 的字段
+	// 如果现在更新 Type3，则 Type2 和 Type1 也都需要收到通知，目前这里处理了接口的直接引用
+	var refs []int64
+	if db.Model(&models.InterfaceParameter{}).Where("ref = ?", existing.ID).Distinct("app_id").Pluck("app_id", &refs).Error == nil {
+		var refApps []models.Application
+		db.Model(&models.Application{}).Where("id IN ?", refs).Find(&refApps)
+		for i := range refApps {
+			if !refApps[i].Enabled {
+				continue
+			}
+			adapter.SendEvent(adapter.Event{
+				App:       &refApps[i],
+				Interface: nil,
+				Code:      adapter.ToolListChanged,
+			})
+		}
+	}
 	return CustomTypeResponse{CustomType: toCustomTypeDTO(existing, fields)}, nil
 }
 
@@ -454,123 +473,4 @@ func DeleteCustomType(req DeleteCustomTypeRequest) (EmptyResponse, error) {
 	}
 	tx.Commit()
 	return EmptyResponse{}, nil
-}
-
-func buildMcpSchemaByField(fieldId int64) (map[string]any, error) {
-	db := database.GetDB()
-	var field models.CustomTypeField
-	if err := db.First(&field, fieldId).Error; err != nil {
-		return nil, errors.New("custom type field not found")
-	}
-	schema := make(map[string]any)
-	schema["description"] = field.Description
-	if field.IsArray {
-		schema["type"] = "array"
-		if field.Type != "custom" {
-			schema["items"] = map[string]any{"type": field.Type}
-		} else {
-			typeSchema, err := buildMcpSchemaByType(*field.Ref)
-			if err != nil {
-				return nil, err
-			}
-			schema["items"] = typeSchema
-		}
-	} else {
-		if field.Type != "custom" {
-			schema["type"] = field.Type
-		} else {
-			schema["type"] = "object"
-			typeSchema, err := buildMcpSchemaByType(*field.Ref)
-			if err != nil {
-				return nil, err
-			}
-			schema["properties"] = typeSchema
-		}
-	}
-	return schema, nil
-}
-func buildMcpSchemaByType(customTypeId int64) (map[string]any, error) {
-	db := database.GetDB()
-	var customType models.CustomType
-	if err := db.First(&customType, customTypeId).Error; err != nil {
-		return nil, errors.New("custom type not found")
-	}
-	// 获取字段列表
-	var fields []models.CustomTypeField
-	if db.Where("custom_type_id = ?", customType.ID).Find(&fields).Error != nil {
-		return nil, errors.New("failed to fetch custom type fields")
-	}
-	schema := make(map[string]any)
-	schema["type"] = "object"
-	schema["description"] = customType.Description
-	required := make([]string, 0)
-	properties := make(map[string]any)
-
-	for _, field := range fields {
-		if field.Required {
-			required = append(required, field.Name)
-		}
-		property, err := buildMcpSchemaByField(field.ID)
-		if err != nil {
-			return nil, err
-		}
-		properties[field.Name] = property
-	}
-	schema["required"] = required
-	schema["properties"] = properties
-	return schema, nil
-}
-
-func BuildMcpInputSchemaByInterface(id int64) (map[string]any, error) {
-	db := database.GetDB()
-	var iface models.Interface
-	if err := db.First(&iface, id).Error; err != nil {
-		return nil, errors.New("interface not found")
-	}
-	// 获取参数列表
-	var params []models.InterfaceParameter
-	if err := db.Where("interface_id = ?", iface.ID).Find(&params).Error; err != nil {
-		return nil, errors.New("failed to fetch interface parameters")
-	}
-	schema := make(map[string]any)
-	schema["type"] = "object"
-	required := make([]string, 0)
-	properties := make(map[string]any)
-	for _, field := range params {
-		property := make(map[string]any)
-		property["description"] = field.Description
-		if field.Required {
-			required = append(required, field.Name)
-		}
-		if field.IsArray {
-			property["type"] = "array"
-			if field.Type != "custom" {
-				property["items"] = map[string]any{"type": field.Type}
-			} else {
-				if field.Ref == nil {
-					return nil, errors.New("custom type field is required")
-				}
-				typeSchema, err := buildMcpSchemaByType(*field.Ref)
-				if err != nil {
-					return nil, err
-				}
-				property["items"] = typeSchema
-			}
-		} else {
-			if field.Type != "custom" {
-				property["type"] = field.Type
-			} else {
-				property["type"] = "object"
-				typeSchema, err := buildMcpSchemaByType(*field.Ref)
-				if err != nil {
-					return nil, err
-				}
-				property["properties"] = typeSchema
-			}
-		}
-		properties[field.Name] = property
-	}
-	schema["required"] = required
-	schema["properties"] = properties
-	return schema, nil
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"mcp-adapter/backend/adapter"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"time"
@@ -208,6 +209,12 @@ func CreateInterface(req CreateInterfaceRequest) (InterfaceResponse, error) {
 		params = append(params, param)
 	}
 	tx.Commit()
+	// 发送创建事件
+	adapter.SendEvent(adapter.Event{
+		Interface: &iface,
+		App:       &app,
+		Code:      adapter.AddToolEvent,
+	})
 	return InterfaceResponse{Interface: toInterfaceDTO(iface, params)}, nil
 }
 
@@ -275,6 +282,11 @@ func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
 	if err := db.First(&existing, req.ID).Error; err != nil {
 		return InterfaceResponse{}, errors.New("interface not found")
 	}
+	var app models.Application
+	if err := db.First(&app, existing.AppID).Error; err != nil {
+		return InterfaceResponse{}, errors.New("application not found")
+	}
+	oldName := existing.Name
 	// 使用事务
 	tx := db.Begin()
 	// 更新基本信息
@@ -359,6 +371,17 @@ func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
 		tx.Where("interface_id = ?", existing.ID).Find(&params)
 	}
 	tx.Commit()
+	// 发送更新事件 删除根据名字删除就好了
+	adapter.SendEvent(adapter.Event{
+		Interface: &models.Interface{Name: oldName},
+		App:       &app,
+		Code:      adapter.RemoveToolEvent,
+	})
+	adapter.SendEvent(adapter.Event{
+		Interface: &existing,
+		App:       &app,
+		Code:      adapter.AddToolEvent,
+	})
 	return InterfaceResponse{Interface: toInterfaceDTO(existing, params)}, nil
 }
 
@@ -370,6 +393,10 @@ func DeleteInterface(req DeleteInterfaceRequest) (EmptyResponse, error) {
 	var iface models.Interface
 	if err := db.First(&iface, req.ID).Error; err != nil {
 		return EmptyResponse{}, errors.New("interface not found")
+	}
+	var app models.Application
+	if err := db.First(&app, iface.AppID).Error; err != nil {
+		return EmptyResponse{}, errors.New("application not found")
 	}
 	// 使用事务删除
 	tx := db.Begin()
@@ -384,5 +411,10 @@ func DeleteInterface(req DeleteInterfaceRequest) (EmptyResponse, error) {
 		return EmptyResponse{}, err
 	}
 	tx.Commit()
+	adapter.SendEvent(adapter.Event{
+		Interface: &iface,
+		App:       &app,
+		Code:      adapter.RemoveToolEvent,
+	})
 	return EmptyResponse{}, nil
 }
