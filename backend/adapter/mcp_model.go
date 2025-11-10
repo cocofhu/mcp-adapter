@@ -40,7 +40,7 @@ type Event struct {
 }
 
 func SendEvent(evt Event) {
-	log.Printf("Sent event: %v", evt)
+	log.Printf("Sending event: %v", evt)
 	event <- evt
 }
 
@@ -52,44 +52,32 @@ func InitServer() {
 		log.Fatalf("Error getting applications: %v", err)
 		return
 	}
-	for _, app := range apps {
-		if app.Protocol != "sse" {
-			log.Printf("Skipping %s protocol", app.Protocol)
+	for i := range apps {
+		err := addApplication(&apps[i])
+		if err != nil {
+			log.Printf("Error adding application %s: %v", apps[i].Name, err)
+			continue
 		}
-		var interfaces []models.Interface
-		db := database.GetDB()
-		query := db
-		query = query.Where("app_id = ?", app.ID)
-		if err := query.Find(&interfaces).Error; err != nil {
-			log.Fatalf("Error getting interfaces: %v", err)
-			return
-		}
-		mcpServer := server.NewMCPServer(app.Name, "1.0.0")
-		sseServer.Store(app.Path, &Server{
-			protocol: app.Protocol,
-			path:     app.Path,
-			server:   mcpServer,
-			impl: server.NewSSEServer(
-				mcpServer,
-				server.WithSSEEndpoint(fmt.Sprintf("/sse/%s", app.Path)),
-				server.WithMessageEndpoint(fmt.Sprintf("/message/%s", app.Path)),
-			),
-		})
-		for _, iface := range interfaces {
-			addTool(&iface, &app)
-		}
-		log.Printf("Added SSE server: %s, path : %s", app.Name, fmt.Sprintf("/sse/%s", app.Path))
 	}
-
 	go func() {
 		for {
 			evt := <-event
+			var err error = nil
 			if evt.Code == AddToolEvent {
-				addTool(evt.Interface, evt.App)
+				err = addTool(evt.Interface, evt.App)
 			} else if evt.Code == RemoveToolEvent {
-				removeTool(evt.Interface, evt.App)
+				err = removeTool(evt.Interface, evt.App)
 			} else if evt.Code == ToolListChanged {
-				toolChanged(evt.Interface, evt.App)
+				err = toolChanged(evt.Interface, evt.App)
+			} else if evt.Code == AddApplicationEvent {
+				err = addApplication(evt.App)
+			} else if evt.Code == RemoveApplicationEvent {
+				err = removeApplication(evt.App)
+			} else {
+				log.Printf("Unknown event code: %v", evt.Code)
+			}
+			if err != nil {
+				log.Printf("Error handling event %v: %v", evt, err)
 			}
 		}
 	}()
@@ -102,30 +90,26 @@ func GetServerImpl(path string) http.Handler {
 	return nil
 }
 
-func addTool(iface *models.Interface, app *models.Application) {
+func addTool(iface *models.Interface, app *models.Application) error {
 	if s, ok := sseServer.Load(app.Path); ok {
 		s := s.(*Server)
 		tool := s.server.GetTool(iface.Name)
 		if tool != nil {
-			log.Printf("tool %s in %s already exists, skipped!", iface.Name, app.Name)
-			return
+			return fmt.Errorf("tool %s in %s already exists, skipped", iface.Name, app.Name)
 		}
 		// 从数据库获取接口参数
 		db := database.GetDB()
 		var params []models.InterfaceParameter
 		if db.Where("interface_id = ?", iface.ID).Find(&params).Error != nil {
-			log.Printf("Error getting interface parameters for tool %s", iface.Name)
-			return
+			return fmt.Errorf("error getting interface parameters for tool %s", iface.Name)
 		}
 		schema, err := BuildMcpInputSchemaByInterface(iface.ID)
 		if err != nil {
-			log.Printf("Error building input schema for tool %s: %v", iface.Name, err)
-			return
+			return err
 		}
 		marshal, err := json.Marshal(schema)
 		if err != nil {
-			log.Printf("Error marshaling input schema for tool %s: %v", iface.Name, err)
-			return
+			return err
 		}
 		log.Printf("Input schema for tool %s: %s", iface.Name, string(marshal))
 		newTool := mcp.NewToolWithRawSchema(iface.Name, iface.Description, marshal)
@@ -141,25 +125,79 @@ func addTool(iface *models.Interface, app *models.Application) {
 			return mcp.NewToolResultText(string(data)), nil
 		})
 		log.Printf("Added tool: %s", iface.Name)
+		return nil
 	} else {
-		log.Printf("Warning Skipping add tool %s in %s not found!", iface.Name, app.Name)
+		return fmt.Errorf("application %s not found for tool %s", app.Name, iface.Name)
 	}
 }
 
-func removeTool(iface *models.Interface, app *models.Application) {
+func removeTool(iface *models.Interface, app *models.Application) error {
+	if app == nil {
+		return fmt.Errorf("application is nil")
+	}
+	if iface == nil {
+		return fmt.Errorf("interface is nil")
+	}
 	if s, ok := sseServer.Load(app.Path); ok {
 		s.(*Server).server.DeleteTools(iface.Name)
 		log.Printf("Removed tool: %s", iface.Name)
-	} else {
-		log.Printf("Warning Skipping remove tool %s in %s not found!", iface.Name, app.Name)
 	}
+	return nil
 }
 
-func toolChanged(_ *models.Interface, app *models.Application) {
+func toolChanged(_ *models.Interface, app *models.Application) error {
+	if app == nil {
+		return fmt.Errorf("application is nil")
+	}
 	if s, ok := sseServer.Load(app.Path); ok {
 		s.(*Server).server.SendNotificationToAllClients(mcp.MethodNotificationToolsListChanged, nil)
 		log.Printf("Tool changed notification sent: %s", app.Name)
-	} else {
-		log.Printf("Warning Skipping toolChanged in %s not found!", app.Name)
 	}
+	return nil
+}
+
+func addApplication(app *models.Application) error {
+	if app == nil {
+		return fmt.Errorf("application is nil")
+	}
+	if app.Protocol != "sse" {
+		return fmt.Errorf("unsupported protocol: %s", app.Protocol)
+	}
+	var interfaces []models.Interface
+	db := database.GetDB()
+	query := db
+	query = query.Where("app_id = ?", app.ID)
+	if err := query.Find(&interfaces).Error; err != nil {
+		return fmt.Errorf("error getting interfaces: %v", err)
+	}
+	mcpServer := server.NewMCPServer(app.Name, "1.0.0")
+	sseServer.Store(app.Path, &Server{
+		protocol: app.Protocol,
+		path:     app.Path,
+		server:   mcpServer,
+		impl: server.NewSSEServer(
+			mcpServer,
+			server.WithSSEEndpoint(fmt.Sprintf("/sse/%s", app.Path)),
+			server.WithMessageEndpoint(fmt.Sprintf("/message/%s", app.Path)),
+		),
+	})
+	for _, iface := range interfaces {
+		err := addTool(&iface, app)
+		if err != nil {
+			log.Printf("Error adding tool %s: %v", iface.Name, err)
+			continue
+		}
+	}
+	log.Printf("Added SSE server: %s, path : %s", app.Name, fmt.Sprintf("/sse/%s", app.Path))
+	return nil
+}
+func removeApplication(app *models.Application) error {
+	if app == nil {
+		return fmt.Errorf("application is nil")
+	}
+	if _, ok := sseServer.Load(app.Path); ok {
+		sseServer.Delete(app.Path)
+		log.Printf("Removed application: %s", app.Name)
+	}
+	return nil
 }

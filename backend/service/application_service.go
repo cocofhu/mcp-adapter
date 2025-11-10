@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"mcp-adapter/backend/adapter"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"time"
@@ -29,13 +30,13 @@ type ListApplicationsRequest struct{}
 
 type UpdateApplicationRequest struct {
 	ID          int64   `json:"id" validate:"required,gt=0"`
-	Name        *string `json:"name" validate:"required,max=128"`       // 应用名称 不允许重复
-	Description *string `json:"description" validate:"max=16384"`       // 应用描述
-	Path        *string `json:"path" validate:"required,max=128"`       // 应用路由标识
-	Protocol    *string `json:"protocol" validate:"required,oneof=sse"` // 应用暴露协议
-	PostProcess *string `json:"post_process" validate:"max=1048576"`    // 应用后处理脚本
-	Environment *string `json:"environment" validate:"max=1048576"`     // 应用环境变量
-	Enabled     *bool   `json:"enabled,omitempty"`                      // 是否启用应用
+	Name        *string `json:"name" validate:"required,max=128"`              // 应用名称 不允许重复
+	Description *string `json:"description" validate:"max=16384"`              // 应用描述
+	Path        *string `json:"path" validate:"required,max=128"`              // 应用路由标识
+	Protocol    *string `json:"protocol" validate:"required,oneof=sse"`        // 应用暴露协议
+	PostProcess *string `json:"post_process" validate:"omitempty,max=1048576"` // 应用后处理脚本
+	Environment *string `json:"environment" validate:"omitempty,max=1048576"`  // 应用环境变量
+	Enabled     *bool   `json:"enabled,omitempty"`                             // 是否启用应用
 }
 
 type DeleteApplicationRequest struct {
@@ -65,7 +66,6 @@ type ApplicationsResponse struct {
 
 type EmptyResponse struct{}
 
-// mapper
 func toApplicationDTO(m models.Application) ApplicationDTO {
 	return ApplicationDTO{
 		ID:          m.ID,
@@ -112,6 +112,11 @@ func CreateApplication(req CreateApplicationRequest) (ApplicationResponse, error
 	if err := db.Create(&app).Error; err != nil {
 		return ApplicationResponse{}, err
 	}
+	adapter.SendEvent(adapter.Event{
+		App:       &app,
+		Interface: nil,
+		Code:      adapter.AddApplicationEvent,
+	})
 	return ApplicationResponse{Application: toApplicationDTO(app)}, nil
 }
 
@@ -154,7 +159,8 @@ func UpdateApplication(req UpdateApplicationRequest) (ApplicationResponse, error
 	if err := db.First(&existing, req.ID).Error; err != nil {
 		return ApplicationResponse{}, errors.New("no such application")
 	}
-
+	oldName := existing.Name
+	oldPath := existing.Path
 	if req.Name != nil {
 		// Name 唯一性检查
 		var count int64
@@ -198,6 +204,16 @@ func UpdateApplication(req UpdateApplicationRequest) (ApplicationResponse, error
 	if err := db.Save(&existing).Error; err != nil {
 		return ApplicationResponse{}, err
 	}
+	adapter.SendEvent(adapter.Event{
+		App:       &models.Application{Name: oldName, Path: oldPath},
+		Interface: nil,
+		Code:      adapter.RemoveApplicationEvent,
+	})
+	adapter.SendEvent(adapter.Event{
+		App:       &existing,
+		Interface: nil,
+		Code:      adapter.AddApplicationEvent,
+	})
 	return ApplicationResponse{Application: toApplicationDTO(existing)}, nil
 }
 
@@ -219,5 +235,10 @@ func DeleteApplication(req DeleteApplicationRequest) (EmptyResponse, error) {
 	if err := db.Delete(&app).Error; err != nil {
 		return EmptyResponse{}, err
 	}
+	adapter.SendEvent(adapter.Event{
+		App:       &app,
+		Interface: nil,
+		Code:      adapter.RemoveApplicationEvent,
+	})
 	return EmptyResponse{}, nil
 }
