@@ -1,0 +1,170 @@
+package main
+
+import (
+	"context"
+	"log"
+	"mcp-adapter/backend/adapter"
+	"mcp-adapter/backend/database"
+	"mcp-adapter/backend/monitor"
+	"mcp-adapter/backend/routes"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	_ "modernc.org/sqlite"
+)
+
+func main() {
+	// 记录启动时的内存状态
+	log.Println("=== Application Starting ===")
+	startStats := monitor.GetMemoryStats()
+	startStats.Log()
+
+	// 初始化数据库
+	database.InitDatabase("mcp-adapter.db")
+
+	// 确保数据库连接在程序退出时关闭
+	defer func() {
+		if sqlDB, err := database.GetDB().DB(); err == nil {
+			if closeErr := sqlDB.Close(); closeErr != nil {
+				log.Printf("Error closing database: %v", closeErr)
+			} else {
+				log.Println("Database connection closed")
+			}
+		}
+	}()
+
+	// 初始化 MCP 服务器管理器
+	adapter.InitServer()
+
+	// 启动内存监控（每 30 秒输出一次）
+	stopMonitor := monitor.StartMemoryMonitor(30 * time.Second)
+	defer close(stopMonitor)
+
+	// 设置路由
+	router := routes.SetupRoutes()
+
+	// 添加健康检查端点
+	router.GET("/health", func(c *gin.Context) {
+		stats := monitor.GetMemoryStats()
+		c.JSON(http.StatusOK, gin.H{
+			"status":      "healthy",
+			"goroutines":  stats.NumGoroutine,
+			"memory_mb":   stats.AllocMB,
+			"gc_count":    stats.NumGC,
+			"heap_objects": stats.HeapObjects,
+		})
+	})
+
+	// 添加内存状态端点
+	router.GET("/debug/memory", func(c *gin.Context) {
+		stats := monitor.GetMemoryStats()
+		c.JSON(http.StatusOK, stats)
+	})
+
+	// 添加强制 GC 端点（仅用于调试）
+	router.POST("/debug/gc", func(c *gin.Context) {
+		before := monitor.GetMemoryStats()
+		monitor.ForceGC()
+		after := monitor.GetMemoryStats()
+
+		comparison := monitor.MemoryComparison{
+			Before: before,
+			After:  after,
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"before": before,
+			"after":  after,
+			"freed_mb": before.AllocMB - after.AllocMB,
+		})
+
+		comparison.Log()
+	})
+
+	// 创建 HTTP 服务器
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: router,
+		// 设置超时以避免资源泄漏
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// 在 goroutine 中启动服务器
+	go func() {
+		log.Println("Server starting on :8080")
+		log.Println("pprof available at http://localhost:8080/debug/pprof/")
+		log.Println("Health check at http://localhost:8080/health")
+		log.Println("Memory stats at http://localhost:8080/debug/memory")
+
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed to start: %v", err)
+		}
+	}()
+
+	// 记录启动后的内存状态
+	time.Sleep(1 * time.Second)
+	afterStartStats := monitor.GetMemoryStats()
+	log.Println("=== Application Started ===")
+
+	startComparison := monitor.MemoryComparison{
+		Before: startStats,
+		After:  afterStartStats,
+	}
+	startComparison.Log()
+
+	// 等待中断信号以优雅关闭服务器
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("=== Shutting Down Server ===")
+	beforeShutdownStats := monitor.GetMemoryStats()
+	beforeShutdownStats.Log()
+
+	// 先关闭 adapter，停止事件处理
+	adapter.Shutdown()
+
+	// 创建 5 秒超时的 context 用于优雅关闭
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// 优雅关闭 HTTP 服务器
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("Server forced to shutdown: %v", err)
+	} else {
+		log.Println("Server exited gracefully")
+	}
+
+	// 强制 GC 以查看释放效果
+	monitor.ForceGC()
+
+	// 记录关闭后的内存状态
+	afterShutdownStats := monitor.GetMemoryStats()
+	log.Println("=== Application Shutdown Complete ===")
+
+	shutdownComparison := monitor.MemoryComparison{
+		Before: beforeShutdownStats,
+		After:  afterShutdownStats,
+	}
+	shutdownComparison.Log()
+
+	// 打印总体对比
+	totalComparison := monitor.MemoryComparison{
+		Before: startStats,
+		After:  afterShutdownStats,
+	}
+	log.Println("=== Total Memory Change ===")
+	totalComparison.Log()
+
+	// 如果 Goroutine 没有完全清理，打印堆栈
+	if afterShutdownStats.NumGoroutine > startStats.NumGoroutine+2 {
+		log.Println("WARNING: Potential goroutine leak detected!")
+		monitor.PrintGoroutineStack()
+	}
+}
