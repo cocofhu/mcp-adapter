@@ -39,7 +39,7 @@ func GetMemoryStats() MemoryStats {
 	}
 }
 
-// LogMemoryStats 记录内存统计信息
+// Log 记录内存统计信息
 func (ms MemoryStats) Log() {
 	log.Printf("=== Memory Stats ===")
 	log.Printf("Time:           %s", ms.Timestamp.Format("2006-01-02 15:04:05"))
@@ -86,7 +86,7 @@ type MemoryComparison struct {
 	After  MemoryStats
 }
 
-// Compare 对比两次内存统计
+// Log 对比两次内存统计
 func (mc MemoryComparison) Log() {
 	allocDiff := mc.After.AllocMB - mc.Before.AllocMB
 	sysDiff := mc.After.SysMB - mc.Before.SysMB

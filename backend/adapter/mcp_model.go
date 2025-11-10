@@ -16,12 +16,12 @@ import (
 
 // ServerManager 管理所有 MCP 服务器的生命周期
 type ServerManager struct {
-	sseServers sync.Map          // path -> *Server
-	eventChan  chan Event        // 事件通道
-	ctx        context.Context   // 控制 goroutine 生命周期
+	sseServers sync.Map           // path -> *Server
+	eventChan  chan Event         // 事件通道
+	ctx        context.Context    // 控制 goroutine 生命周期
 	cancel     context.CancelFunc // 取消函数
-	wg         sync.WaitGroup    // 等待 goroutine 完成
-	mu         sync.RWMutex      // 保护并发操作
+	wg         sync.WaitGroup     // 等待 goroutine 完成
+	mu         sync.RWMutex       // 保护并发操作
 }
 
 var serverManager *ServerManager
@@ -63,9 +63,9 @@ func (s *Server) AddCleanup(fn func()) {
 func (s *Server) Cleanup() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	log.Printf("Cleaning up server: %s", s.path)
-	
+
 	// 逆序执行清理函数
 	for i := len(s.cleanupFns) - 1; i >= 0; i-- {
 		if s.cleanupFns[i] != nil {
@@ -79,7 +79,7 @@ func (s *Server) Cleanup() {
 			}()
 		}
 	}
-	
+
 	s.cleanupFns = nil
 	log.Printf("Server cleanup completed: %s", s.path)
 }
@@ -90,7 +90,7 @@ func SendEvent(evt Event) {
 		log.Printf("Warning: ServerManager not initialized, event dropped: %v", evt.Code)
 		return
 	}
-	
+
 	select {
 	case serverManager.eventChan <- evt:
 		log.Printf("Event sent: %v", evt.Code)
@@ -110,14 +110,14 @@ func InitServer() {
 			ctx:       ctx,
 			cancel:    cancel,
 		}
-		
+
 		// 启动事件处理循环
 		serverManager.wg.Add(1)
 		go serverManager.eventLoop()
-		
+
 		// 加载现有应用
 		serverManager.loadExistingApplications()
-		
+
 		log.Println("ServerManager initialized successfully")
 	})
 }
@@ -126,13 +126,13 @@ func InitServer() {
 func (sm *ServerManager) eventLoop() {
 	defer sm.wg.Done()
 	log.Println("Event loop started")
-	
+
 	for {
 		select {
 		case <-sm.ctx.Done():
 			log.Println("Event loop shutting down...")
 			return
-			
+
 		case evt := <-sm.eventChan:
 			sm.handleEvent(evt)
 		}
@@ -142,7 +142,7 @@ func (sm *ServerManager) eventLoop() {
 // handleEvent 处理单个事件
 func (sm *ServerManager) handleEvent(evt Event) {
 	var err error
-	
+
 	switch evt.Code {
 	case AddToolEvent:
 		err = sm.addTool(evt.Interface, evt.App)
@@ -158,7 +158,7 @@ func (sm *ServerManager) handleEvent(evt Event) {
 		log.Printf("Unknown event code: %v", evt.Code)
 		return
 	}
-	
+
 	if err != nil {
 		log.Printf("Error handling event %v: %v", evt.Code, err)
 	}
@@ -168,18 +168,18 @@ func (sm *ServerManager) handleEvent(evt Event) {
 func (sm *ServerManager) loadExistingApplications() {
 	db := database.GetDB()
 	var apps []models.Application
-	
+
 	if err := db.Find(&apps).Error; err != nil {
 		log.Printf("Error loading applications: %v", err)
 		return
 	}
-	
+
 	for i := range apps {
 		if err := sm.addApplication(&apps[i]); err != nil {
 			log.Printf("Error adding application %s: %v", apps[i].Name, err)
 		}
 	}
-	
+
 	log.Printf("Loaded %d applications", len(apps))
 }
 
@@ -188,25 +188,25 @@ func Shutdown() {
 	if serverManager == nil {
 		return
 	}
-	
+
 	log.Println("Shutting down ServerManager...")
-	
+
 	// 取消 context，停止事件循环
 	serverManager.cancel()
-	
+
 	// 等待事件循环结束
 	serverManager.wg.Wait()
-	
+
 	// 清理所有服务器
 	serverManager.cleanupAllServers()
-	
+
 	log.Println("ServerManager shutdown completed")
 }
 
 // cleanupAllServers 清理所有服务器资源
 func (sm *ServerManager) cleanupAllServers() {
 	log.Println("Cleaning up all servers...")
-	
+
 	count := 0
 	sm.sseServers.Range(func(key, value interface{}) bool {
 		if srv, ok := value.(*Server); ok {
@@ -216,7 +216,7 @@ func (sm *ServerManager) cleanupAllServers() {
 		sm.sseServers.Delete(key)
 		return true
 	})
-	
+
 	log.Printf("Cleaned up %d servers", count)
 }
 
@@ -225,7 +225,7 @@ func GetServerImpl(path string) http.Handler {
 	if serverManager == nil {
 		return nil
 	}
-	
+
 	if s, ok := serverManager.sseServers.Load(path); ok {
 		return s.(*Server).impl
 	}
@@ -240,30 +240,30 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 		if tool != nil {
 			return fmt.Errorf("tool %s in %s already exists, skipped", iface.Name, app.Name)
 		}
-		
+
 		// 从数据库获取接口参数
 		db := database.GetDB()
 		var params []models.InterfaceParameter
 		if db.Where("interface_id = ?", iface.ID).Find(&params).Error != nil {
 			return fmt.Errorf("error getting interface parameters for tool %s", iface.Name)
 		}
-		
+
 		schema, err := BuildMcpInputSchemaByInterface(iface.ID)
 		if err != nil {
 			return err
 		}
-		
+
 		marshal, err := json.Marshal(schema)
 		if err != nil {
 			return err
 		}
-		
+
 		log.Printf("Input schema for tool %s: %s", iface.Name, string(marshal))
 		newTool := mcp.NewToolWithRawSchema(iface.Name, iface.Description, marshal)
-		
+
 		// 创建工具的副本以避免闭包捕获
 		ifaceCopy := *iface
-		
+
 		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := req.GetArguments()
 			data, code, err := CallHTTPInterface(ctx, &ifaceCopy, args)
@@ -275,11 +275,11 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			}
 			return mcp.NewToolResultText(string(data)), nil
 		})
-		
+
 		log.Printf("Added tool: %s", iface.Name)
 		return nil
 	}
-	
+
 	return fmt.Errorf("application %s not found for tool %s", app.Name, iface.Name)
 }
 
@@ -291,7 +291,7 @@ func (sm *ServerManager) removeTool(iface *models.Interface, app *models.Applica
 	if iface == nil {
 		return fmt.Errorf("interface is nil")
 	}
-	
+
 	if s, ok := sm.sseServers.Load(app.Path); ok {
 		s.(*Server).server.DeleteTools(iface.Name)
 		log.Printf("Removed tool: %s", iface.Name)
@@ -304,7 +304,7 @@ func (sm *ServerManager) toolChanged(_ *models.Interface, app *models.Applicatio
 	if app == nil {
 		return fmt.Errorf("application is nil")
 	}
-	
+
 	if s, ok := sm.sseServers.Load(app.Path); ok {
 		s.(*Server).server.SendNotificationToAllClients(mcp.MethodNotificationToolsListChanged, nil)
 		log.Printf("Tool changed notification sent: %s", app.Name)
@@ -320,22 +320,19 @@ func (sm *ServerManager) addApplication(app *models.Application) error {
 	if app.Protocol != "sse" {
 		return fmt.Errorf("unsupported protocol: %s", app.Protocol)
 	}
-	
+
 	// 检查是否已存在
 	if _, exists := sm.sseServers.Load(app.Path); exists {
 		log.Printf("Application %s already exists, skipping", app.Name)
 		return nil
 	}
-	
 	var interfaces []models.Interface
 	db := database.GetDB()
 	query := db.Where("app_id = ?", app.ID)
 	if err := query.Find(&interfaces).Error; err != nil {
 		return fmt.Errorf("error getting interfaces: %v", err)
 	}
-	
 	mcpServer := server.NewMCPServer(app.Name, "1.0.0")
-	
 	srv := &Server{
 		protocol: app.Protocol,
 		path:     app.Path,
@@ -347,17 +344,14 @@ func (sm *ServerManager) addApplication(app *models.Application) error {
 		),
 		cleanupFns: make([]func(), 0),
 	}
-	
 	// 添加清理函数：清理所有工具
 	srv.AddCleanup(func() {
 		log.Printf("Cleaning up tools for application: %s", app.Name)
 		// 如果 MCPServer 有 Close/Shutdown 方法，在此调用
 		// mcpServer.Close()
 	})
-	
 	// 存储服务器
 	sm.sseServers.Store(app.Path, srv)
-	
 	// 添加所有接口作为工具
 	for i := range interfaces {
 		if err := sm.addTool(&interfaces[i], app); err != nil {
@@ -365,7 +359,6 @@ func (sm *ServerManager) addApplication(app *models.Application) error {
 			continue
 		}
 	}
-	
 	log.Printf("Added SSE server: %s, path: %s, tools: %d", app.Name, fmt.Sprintf("/sse/%s", app.Path), len(interfaces))
 	return nil
 }
@@ -375,20 +368,15 @@ func (sm *ServerManager) removeApplication(app *models.Application) error {
 	if app == nil {
 		return fmt.Errorf("application is nil")
 	}
-	
 	if s, ok := sm.sseServers.Load(app.Path); ok {
 		srv := s.(*Server)
-		
 		// 执行清理
 		srv.Cleanup()
-		
 		// 从 map 中删除
 		sm.sseServers.Delete(app.Path)
-		
 		log.Printf("Removed application and cleaned up resources: %s", app.Name)
 	} else {
 		log.Printf("Application not found for removal: %s", app.Name)
 	}
-	
 	return nil
 }

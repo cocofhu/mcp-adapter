@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"mcp-adapter/backend/adapter"
 	"mcp-adapter/backend/database"
@@ -18,7 +19,7 @@ import (
 func main() {
 	// 初始化数据库
 	database.InitDatabase("mcp-adapter.db")
-	
+
 	// 确保数据库连接在程序退出时关闭
 	defer func() {
 		if sqlDB, err := database.GetDB().DB(); err == nil {
@@ -45,7 +46,7 @@ func main() {
 	// 在 goroutine 中启动服务器
 	go func() {
 		log.Println("Server starting on :8080")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Server failed to start: %v", err)
 		}
 	}()
