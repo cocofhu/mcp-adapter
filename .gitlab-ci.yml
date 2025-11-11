@@ -1,0 +1,93 @@
+stages:
+  - build
+  - test
+
+variables:
+  # Docker 相关配置
+  DOCKER_REGISTRY: registry.cocofhu.cc
+  DOCKER_HOST: tcp://docker:2375
+  TENCENT_REGISTRY: ccr.ccs.tencentyun.com
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
+  
+  # 项目配置
+  PROJECT_NAME: mcp-adapter
+  DOCKER_IMAGE_PATH: cocofhu/mcp-adapter
+
+# Go 测试任务（可选）
+go-test:
+  image: golang:1.25-alpine
+  stage: test
+  before_script:
+    - apk add --no-cache gcc musl-dev sqlite-dev git
+    - cd backend
+  script:
+    - go mod download
+    - go test -v ./...
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_MERGE_REQUEST_ID
+  allow_failure: true
+
+# Docker 构建和推送
+docker-build:
+  image: docker:cli
+  stage: build
+  services:
+    - name: docker:dind
+      entrypoint: ["env", "-u", "DOCKER_HOST"]
+      command: ["dockerd-entrypoint.sh", "--insecure-registry=registry.cocofhu.cc"]
+  before_script:
+    # 设置版本号
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        export VERSION="$CI_COMMIT_TAG"
+      else
+        export VERSION="v1.0.0-${CI_COMMIT_SHORT_SHA}"
+      fi
+    # 设置镜像名称
+    - export DOCKER_IMAGE_NAME="$DOCKER_REGISTRY/$PROJECT_NAME:$VERSION"
+    - export DOCKER_IMAGE_LATEST="$DOCKER_REGISTRY/$PROJECT_NAME:latest"
+    - export DOCKER_IMAGE_TENCENT="$TENCENT_REGISTRY/$DOCKER_IMAGE_PATH:$VERSION"
+    - export DOCKER_IMAGE_TENCENT_LATEST="$TENCENT_REGISTRY/$DOCKER_IMAGE_PATH:latest"
+    - echo "Building Docker image $DOCKER_IMAGE_NAME"
+  script:
+    # 构建 Docker 镜像
+    - docker build --pull -t "$DOCKER_IMAGE_NAME" .
+    
+    # 推送到内部仓库
+    - docker push "$DOCKER_IMAGE_NAME"
+    
+    # 如果是主分支或标签，推送 latest 和腾讯云镜像
+    - |
+      if [[ "$CI_COMMIT_REF_NAME" == "$CI_DEFAULT_BRANCH" ]] || [[ -n "$CI_COMMIT_TAG" ]]; then
+        echo "Pushing latest tag and Tencent registry images..."
+        
+        # 推送 latest 到内部仓库
+        docker tag "$DOCKER_IMAGE_NAME" "$DOCKER_IMAGE_LATEST"
+        docker push "$DOCKER_IMAGE_LATEST"
+        
+        # 登录腾讯云镜像仓库
+        docker login ccr.ccs.tencentyun.com --username="$TENCENT_DOCKER_USER" --password="$TENCENT_DOCKER_PASS"
+        
+        # 推送到腾讯云仓库
+        docker tag "$DOCKER_IMAGE_NAME" "$DOCKER_IMAGE_TENCENT"
+        docker push "$DOCKER_IMAGE_TENCENT"
+        
+        docker tag "$DOCKER_IMAGE_NAME" "$DOCKER_IMAGE_TENCENT_LATEST"
+        docker push "$DOCKER_IMAGE_TENCENT_LATEST"
+        
+        echo "All images pushed successfully!"
+      fi
+  after_script:
+    - docker images
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      exists:
+        - Dockerfile
+    - if: $CI_COMMIT_TAG
+      exists:
+        - Dockerfile
+  tags:
+    - docker
+

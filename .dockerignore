@@ -1,0 +1,64 @@
+# 忽略 Git 相关文件
+.git
+.gitignore
+.gitattributes
+
+# 忽略文档和说明文件
+*.md
+README*
+LICENSE
+CHANGELOG*
+
+# 忽略测试和脚本
+scripts/
+test_*
+*.test
+*.spec
+
+# 忽略数据库文件
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+data/
+
+# 忽略日志文件
+*.log
+logs/
+
+# 忽略临时文件
+tmp/
+temp/
+*.tmp
+*.swp
+*.bak
+*~
+
+# 忽略 IDE 配置
+.vscode/
+.idea/
+*.iml
+.DS_Store
+
+# 忽略构建产物
+bin/
+dist/
+build/
+*.exe
+*.exe~
+
+# 忽略 Node.js 相关（如果有）
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# 忽略环境配置
+.env
+.env.local
+.env.*.local
+*.example
+
+# 忽略 Docker 相关
+Dockerfile*
+docker-compose*
+.dockerignore
