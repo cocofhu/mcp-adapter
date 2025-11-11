@@ -184,6 +184,9 @@ function renderApplications(apps) {
                 <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); viewApplicationEndpoint(${app.id})">
                     <i class="fas fa-eye"></i> 查看接口
                 </button>
+                <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); manageApplicationInterfaces(${app.id})">
+                    <i class="fas fa-plug"></i> 接口管理
+                </button>
                 <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); editApplication(${app.id})">
                     <i class="fas fa-edit"></i> 编辑
                 </button>
@@ -354,6 +357,35 @@ function viewApplicationEndpoint(id) {
 
 function editApplication(id) {
     showAppForm(id);
+}
+
+function manageApplicationInterfaces(id) {
+    const app = state.applications.find(a => a.id === id);
+    if (!app) return;
+    
+    // 在全局应用选择器中选中该应用
+    const globalAppSelect = document.getElementById('global-app-select');
+    globalAppSelect.value = id;
+    state.currentApp = app;
+    
+    // 切换到接口管理标签页
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.tab === 'interfaces') {
+            item.classList.add('active');
+        }
+    });
+    
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById('interfaces-tab').classList.add('active');
+    
+    // 加载该应用的接口列表
+    loadInterfaces();
+    
+    // 提示用户
+    showToast(`已切换到"${app.name}"的接口管理`, 'success');
 }
 
 async function deleteApplication(id) {
