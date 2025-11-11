@@ -8,6 +8,7 @@ import (
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -232,7 +233,7 @@ func GetServerImpl(path string) http.Handler {
 	return nil
 }
 
-// addTool 添加工具到指定应用
+	// addTool 添加工具到指定应用
 func (sm *ServerManager) addTool(iface *models.Interface, app *models.Application) error {
 	if s, ok := sm.sseServers.Load(app.Path); ok {
 		srv := s.(*Server)
@@ -263,10 +264,20 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 
 		// 创建工具的副本以避免闭包捕获
 		ifaceCopy := *iface
+		// 创建参数副本，缓存参数信息避免在调用时查库
+		paramsCopy := make([]models.InterfaceParameter, len(params))
+		copy(paramsCopy, params)
 
 		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := req.GetArguments()
-			data, code, err := CallHTTPInterface(ctx, &ifaceCopy, args)
+			
+			// 应用默认值并验证参数
+			processedArgs, err := applyDefaultsAndValidate(args, paramsCopy)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			
+			data, code, err := CallHTTPInterfaceWithParams(ctx, &ifaceCopy, processedArgs, paramsCopy)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -281,6 +292,75 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 	}
 
 	return fmt.Errorf("application %s not found for tool %s", app.Name, iface.Name)
+}
+
+// applyDefaultsAndValidate 应用默认值并验证参数
+func applyDefaultsAndValidate(args map[string]any, params []models.InterfaceParameter) (map[string]any, error) {
+	processedArgs := make(map[string]any)
+	
+	// 首先复制所有提供的参数
+	for k, v := range args {
+		processedArgs[k] = v
+	}
+	
+	// 构建参数索引
+	paramIndex := make(map[string]models.InterfaceParameter)
+	for _, p := range params {
+		paramIndex[p.Name] = p
+	}
+	
+	// 应用默认值并验证
+	for _, p := range params {
+		_, provided := processedArgs[p.Name]
+		
+		// 如果参数未提供且有默认值，应用默认值
+		if !provided && p.DefaultValue != nil && *p.DefaultValue != "" {
+			// 根据参数类型转换默认值
+			convertedVal, err := convertDefaultValue(*p.DefaultValue, p.Type)
+			if err != nil {
+				return nil, fmt.Errorf("failed to convert default value for parameter %s: %w", p.Name, err)
+			}
+			processedArgs[p.Name] = convertedVal
+			log.Printf("Applied default value for parameter %s: %v", p.Name, convertedVal)
+		}
+		
+		// 验证必填参数
+		if p.Required {
+			finalVal, exists := processedArgs[p.Name]
+			if !exists || finalVal == nil {
+				return nil, fmt.Errorf("missing required parameter: %s", p.Name)
+			}
+		}
+	}
+	
+	return processedArgs, nil
+}
+
+// convertDefaultValue 根据参数类型转换默认值字符串
+func convertDefaultValue(defaultValue string, paramType string) (any, error) {
+	switch paramType {
+	case "number":
+		// 尝试转换为 float64
+		if val, err := strconv.ParseFloat(defaultValue, 64); err == nil {
+			return val, nil
+		}
+		// 如果失败，尝试转换为 int
+		if val, err := strconv.ParseInt(defaultValue, 10, 64); err == nil {
+			return val, nil
+		}
+		return nil, fmt.Errorf("invalid number format: %s", defaultValue)
+	case "boolean":
+		val, err := strconv.ParseBool(defaultValue)
+		if err != nil {
+			return nil, fmt.Errorf("invalid boolean format: %s", defaultValue)
+		}
+		return val, nil
+	case "string":
+		return defaultValue, nil
+	default:
+		// 自定义类型不应该有默认值，但如果有就返回字符串
+		return defaultValue, nil
+	}
 }
 
 // removeTool 从指定应用移除工具

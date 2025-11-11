@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"net/http"
 	"net/url"
@@ -16,8 +15,27 @@ import (
 	"time"
 )
 
-// BuildHTTPRequest 根据 Interface 和参数构建 http.Request
-func BuildHTTPRequest(ctx context.Context, iface *models.Interface, args map[string]any) (*http.Request, error) {
+// CallHTTPInterfaceWithParams 使用提供的参数列表执行请求，避免查库
+func CallHTTPInterfaceWithParams(ctx context.Context, iface *models.Interface, args map[string]any, params []models.InterfaceParameter) ([]byte, int, error) {
+	req, err := BuildHTTPRequestWithParams(ctx, iface, args, params)
+	if err != nil {
+		return nil, 0, err
+	}
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return data, resp.StatusCode, nil
+}
+
+// BuildHTTPRequestWithParams 使用提供的参数列表构建请求，避免查库
+func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, args map[string]any, params []models.InterfaceParameter) (*http.Request, error) {
 	if iface == nil {
 		return nil, errors.New("interface is nil")
 	}
@@ -27,11 +45,6 @@ func BuildHTTPRequest(ctx context.Context, iface *models.Interface, args map[str
 	if iface.URL == "" {
 		return nil, errors.New("interface url is empty")
 	}
-
-	// 从数据库获取接口参数
-	db := database.GetDB()
-	var params []models.InterfaceParameter
-	db.Where("interface_id = ?", iface.ID).Find(&params)
 
 	method := strings.ToUpper(strings.TrimSpace(iface.Method))
 	if method == "" {
@@ -47,11 +60,6 @@ func BuildHTTPRequest(ctx context.Context, iface *models.Interface, args map[str
 	paramIndex := make(map[string]models.InterfaceParameter)
 	for _, p := range params {
 		paramIndex[p.Name] = p
-		
-		// 应用默认值
-		if p.DefaultValue != nil && args[p.Name] == nil {
-			args[p.Name] = *p.DefaultValue
-		}
 	}
 
 	// 应用提供的参数
@@ -73,16 +81,6 @@ func BuildHTTPRequest(ctx context.Context, iface *models.Interface, args map[str
 		} else {
 			// 如果参数未定义，默认放到 body
 			bodyMap[name] = val
-		}
-	}
-
-	// 检查必填参数
-	for _, p := range params {
-		if p.Required {
-			_, provided := args[p.Name]
-			if !provided && p.DefaultValue == nil {
-				return nil, fmt.Errorf("missing required parameter: %s", p.Name)
-			}
 		}
 	}
 
@@ -134,23 +132,4 @@ func BuildHTTPRequest(ctx context.Context, iface *models.Interface, args map[str
 	}
 	log.Printf("%+v", req)
 	return req, nil
-}
-
-// CallHTTPInterface 执行请求并返回响应内容和状态码
-func CallHTTPInterface(ctx context.Context, iface *models.Interface, args map[string]any) ([]byte, int, error) {
-	req, err := BuildHTTPRequest(ctx, iface, args)
-	if err != nil {
-		return nil, 0, err
-	}
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, err
-	}
-	return data, resp.StatusCode, nil
 }
