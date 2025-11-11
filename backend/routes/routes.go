@@ -36,7 +36,7 @@ func SetupRoutes() *gin.Engine {
 
 		// 自定义类型相关路由
 		api.POST("/custom-types", handlers.CreateCustomType)
-		api.GET("/custom-types", handlers.GetCustomTypes)       // 需要 app_id 查询参数
+		api.GET("/custom-types", handlers.GetCustomTypes) // 需要 app_id 查询参数
 		api.GET("/custom-types/:id", handlers.GetCustomType)
 		api.PUT("/custom-types/:id", handlers.UpdateCustomType)
 		api.DELETE("/custom-types/:id", handlers.DeleteCustomType)
@@ -53,6 +53,8 @@ func SetupRoutes() *gin.Engine {
 	// MCP-SSE服务
 	r.Any("/sse/:path", handlers.ServeSSE)
 	r.Any("/message/:path", handlers.ServeSSE)
+	// MCP-Streamable服务
+	r.Any("/streamable/:path", handlers.ServeStreamable)
 
 	log.Println("Routes initialized with Gin")
 	return r
@@ -63,7 +65,7 @@ func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Mcp-Protocol-Version, Mcp-Session-Id")
 		if c.Request.Method == http.MethodOptions {
 			c.Status(http.StatusOK)
 			c.Abort()

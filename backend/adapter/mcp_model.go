@@ -222,12 +222,12 @@ func (sm *ServerManager) cleanupAllServers() {
 }
 
 // GetServerImpl 获取服务器实现
-func GetServerImpl(path string) http.Handler {
+func GetServerImpl(path, protocol string) http.Handler {
 	if serverManager == nil {
 		return nil
 	}
 
-	if s, ok := serverManager.sseServers.Load(path); ok {
+	if s, ok := serverManager.sseServers.Load(path); ok && protocol == s.(*Server).protocol {
 		return s.(*Server).impl
 	}
 	return nil
@@ -395,7 +395,7 @@ func (sm *ServerManager) addApplication(app *models.Application) error {
 	if app == nil {
 		return fmt.Errorf("application is nil")
 	}
-	if app.Protocol != "sse" {
+	if app.Protocol != "sse" && app.Protocol != "streamable" {
 		return fmt.Errorf("unsupported protocol: %s", app.Protocol)
 	}
 
@@ -411,16 +411,31 @@ func (sm *ServerManager) addApplication(app *models.Application) error {
 		return fmt.Errorf("error getting interfaces: %v", err)
 	}
 	mcpServer := server.NewMCPServer(app.Name, "1.0.0")
-	srv := &Server{
-		protocol: app.Protocol,
-		path:     app.Path,
-		server:   mcpServer,
-		impl: server.NewSSEServer(
-			mcpServer,
-			server.WithSSEEndpoint(fmt.Sprintf("/sse/%s", app.Path)),
-			server.WithMessageEndpoint(fmt.Sprintf("/message/%s", app.Path)),
-		),
-		cleanupFns: make([]func(), 0),
+	var srv *Server = nil
+	if app.Protocol == "sse" {
+		srv = &Server{
+			protocol: app.Protocol,
+			path:     app.Path,
+			server:   mcpServer,
+			impl: server.NewSSEServer(
+				mcpServer,
+				server.WithSSEEndpoint(fmt.Sprintf("/sse/%s", app.Path)),
+				server.WithMessageEndpoint(fmt.Sprintf("/message/%s", app.Path)),
+			),
+			cleanupFns: make([]func(), 0),
+		}
+	} else {
+		srv = &Server{
+			protocol: app.Protocol,
+			path:     app.Path,
+			server:   mcpServer,
+			impl: server.NewStreamableHTTPServer(
+				mcpServer,
+				server.WithEndpointPath(fmt.Sprintf("/streamable/%s", app.Path)),
+				server.WithStateLess(false),
+			),
+			cleanupFns: make([]func(), 0),
+		}
 	}
 	// 添加清理函数：清理所有工具
 	srv.AddCleanup(func() {
@@ -437,7 +452,7 @@ func (sm *ServerManager) addApplication(app *models.Application) error {
 			continue
 		}
 	}
-	log.Printf("Added SSE server: %s, path: %s, tools: %d", app.Name, fmt.Sprintf("/sse/%s", app.Path), len(interfaces))
+	log.Printf("Added MCP server: %s, protocol: %s, tools: %d", app.Name, app.Protocol, len(interfaces))
 	return nil
 }
 

@@ -9,7 +9,18 @@ import (
 
 func ServeSSE(c *gin.Context) {
 	path := c.Param("path")
-	impl := adapter.GetServerImpl(path)
+	impl := adapter.GetServerImpl(path, "sse")
+	if impl == nil {
+		c.String(http.StatusNotFound, "sse path not found")
+		return
+	}
+	// 复用底层 http.Handler
+	impl.ServeHTTP(c.Writer, c.Request)
+}
+
+func ServeStreamable(c *gin.Context) {
+	path := c.Param("path")
+	impl := adapter.GetServerImpl(path, "streamable")
 	if impl == nil {
 		c.String(http.StatusNotFound, "sse path not found")
 		return
