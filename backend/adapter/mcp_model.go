@@ -378,25 +378,29 @@ func filterValueBySchema(value any, schema any) any {
 		return value
 	}
 
-	schemaType, _ := schemaMap["type"].(string)
-
-	switch schemaType {
-	case "object":
-		// 处理嵌套对象
+	// 检查 schema 是否有嵌套的 properties（不依赖 type 字段）
+	if properties, ok := schemaMap["properties"].(map[string]any); ok {
+		// 如果 properties 本身又有 properties，说明有多层嵌套
+		if nestedProps, hasNested := properties["properties"].(map[string]any); hasNested {
+			// 递归处理，使用内层的 properties 作为真正的 schema
+			return filterValueBySchema(value, properties)
+		}
+		
+		// 正常的对象类型，使用 properties 过滤
 		if valueMap, ok := value.(map[string]any); ok {
-			properties, _ := schemaMap["properties"].(map[string]any)
-			if properties != nil {
-				filtered := make(map[string]any)
-				for key, propSchema := range properties {
-					if v, exists := valueMap[key]; exists {
-						filtered[key] = filterValueBySchema(v, propSchema)
-					}
+			filtered := make(map[string]any)
+			for key, propSchema := range properties {
+				if v, exists := valueMap[key]; exists {
+					filtered[key] = filterValueBySchema(v, propSchema)
 				}
-				return filtered
 			}
+			return filtered
 		}
 		return value
+	}
 
+	schemaType, _ := schemaMap["type"].(string)
+	switch schemaType {
 	case "array":
 		// 处理数组
 		if valueSlice, ok := value.([]any); ok {
@@ -412,7 +416,7 @@ func filterValueBySchema(value any, schema any) any {
 		return value
 
 	default:
-		// 基础类型直接返回
+		// 基础类型或无法识别的类型直接返回
 		return value
 	}
 }
