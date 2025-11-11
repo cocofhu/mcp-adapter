@@ -282,13 +282,15 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			shouldStructuredOutput = true
 		}
 
-		// 创建工具的副本以避免闭包捕获
-		ifaceCopy := *iface
-		// 创建参数副本，缓存参数信息避免在调用时查库
-		paramsCopy := make([]models.InterfaceParameter, len(params))
-		copy(paramsCopy, params)
+	// 创建工具的副本以避免闭包捕获
+	ifaceCopy := *iface
+	// 创建参数副本，缓存参数信息避免在调用时查库
+	paramsCopy := make([]models.InterfaceParameter, len(params))
+	copy(paramsCopy, params)
+	// 创建 outputSchema 的副本
+	outputSchemaCopy := outputSchema
 
-		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := req.GetArguments()
 
 			// 应用默认值并验证参数
@@ -304,14 +306,15 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			if code != http.StatusOK {
 				log.Printf("Error calling tool %s, code: %d", ifaceCopy.Name, code)
 			}
-			if shouldStructuredOutput {
-				var out map[string]any
-				if err := json.Unmarshal(data, &out); err != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("failed to parse structured output: %v", err)), nil
-				}
-				return mcp.NewToolResultStructured(out, string(data)), nil
+		if shouldStructuredOutput {
+			out, text, err := parseStructuredOutput(data)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to parse structured output: %v", err)), nil
 			}
-			return mcp.NewToolResultText(string(data)), nil
+			filtered := filterOutputBySchema(out, outputSchemaCopy)
+			return mcp.NewToolResultStructured(filtered, text), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
 		})
 
 		log.Printf("Added tool: %s", iface.Name)
@@ -319,6 +322,99 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 	}
 
 	return fmt.Errorf("application %s not found for tool %s", app.Name, iface.Name)
+}
+
+// parseStructuredOutput 解析结构化输出，支持直接 JSON 对象和双重编码的 JSON 字符串
+func parseStructuredOutput(data []byte) (map[string]any, string, error) {
+	var out map[string]any
+	
+	// 尝试直接解析为 map[string]any
+	if err := json.Unmarshal(data, &out); err == nil {
+		return out, string(data), nil
+	}
+	
+	// 尝试先解析为字符串（处理双重编码）
+	var strData string
+	if err := json.Unmarshal(data, &strData); err != nil {
+		return nil, "", fmt.Errorf("invalid JSON format")
+	}
+	
+	// 再次解析字符串内容
+	if err := json.Unmarshal([]byte(strData), &out); err != nil {
+		return nil, "", err
+	}
+	
+	return out, strData, nil
+}
+
+// filterOutputBySchema 根据 outputSchema 过滤输出，只保留 schema 中定义的字段（递归处理）
+func filterOutputBySchema(out map[string]any, outputSchema map[string]any) map[string]any {
+	if outputSchema == nil {
+		return out
+	}
+
+	// 获取 schema 中的 properties
+	properties, ok := outputSchema["properties"].(map[string]any)
+	if !ok || properties == nil {
+		return out
+	}
+
+	// 创建过滤后的结果
+	filtered := make(map[string]any)
+	for key, propSchema := range properties {
+		if value, exists := out[key]; exists {
+			// 递归处理复杂类型
+			filtered[key] = filterValueBySchema(value, propSchema)
+		}
+	}
+
+	return filtered
+}
+
+// filterValueBySchema 根据 schema 过滤单个值（递归处理对象和数组）
+func filterValueBySchema(value any, schema any) any {
+	schemaMap, ok := schema.(map[string]any)
+	if !ok {
+		return value
+	}
+
+	schemaType, _ := schemaMap["type"].(string)
+
+	switch schemaType {
+	case "object":
+		// 处理嵌套对象
+		if valueMap, ok := value.(map[string]any); ok {
+			properties, _ := schemaMap["properties"].(map[string]any)
+			if properties != nil {
+				filtered := make(map[string]any)
+				for key, propSchema := range properties {
+					if v, exists := valueMap[key]; exists {
+						filtered[key] = filterValueBySchema(v, propSchema)
+					}
+				}
+				return filtered
+			}
+		}
+		return value
+
+	case "array":
+		// 处理数组
+		if valueSlice, ok := value.([]any); ok {
+			items, hasItems := schemaMap["items"]
+			if hasItems {
+				filtered := make([]any, len(valueSlice))
+				for i, item := range valueSlice {
+					filtered[i] = filterValueBySchema(item, items)
+				}
+				return filtered
+			}
+		}
+		return value
+
+	default:
+		// 基础类型直接返回
+		return value
+	}
 }
 
 // applyDefaultsAndValidate 应用默认值并验证参数
