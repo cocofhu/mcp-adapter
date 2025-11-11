@@ -77,9 +77,9 @@ func BuildMcpInputSchemaByInterface(id int64) (map[string]any, error) {
 	if err := db.First(&iface, id).Error; err != nil {
 		return nil, errors.New("interface not found")
 	}
-	// 获取参数列表
+	// 获取参数列表，只包含 input 组的参数
 	var params []models.InterfaceParameter
-	if err := db.Where("interface_id = ?", iface.ID).Find(&params).Error; err != nil {
+	if err := db.Where("interface_id = ? AND `group` = ?", iface.ID, "input").Find(&params).Error; err != nil {
 		return nil, errors.New("failed to fetch interface parameters")
 	}
 	schema := make(map[string]any)
@@ -87,6 +87,7 @@ func BuildMcpInputSchemaByInterface(id int64) (map[string]any, error) {
 	required := make([]string, 0)
 	properties := make(map[string]any)
 	for _, field := range params {
+		// 有默认值的非数组基础类型参数不需要用户输入，跳过
 		if field.DefaultValue != nil &&
 			*field.DefaultValue != "" &&
 			!field.IsArray && field.Type != "custom" {

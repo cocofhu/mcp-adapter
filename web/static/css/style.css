@@ -633,6 +633,11 @@ body {
     flex: 1 1 100px;
 }
 
+.field-row .param-group-select,
+.param-row .param-group-select {
+    flex: 1 1 90px;
+}
+
 .field-row .field-desc-input,
 .param-row .field-desc-input {
     width: 100%;

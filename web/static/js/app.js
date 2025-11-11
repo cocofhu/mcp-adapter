@@ -978,6 +978,7 @@ function collectParamFromRow(row, allowDefaultValue) {
     const paramType = row.querySelector('.param-type-select').value;
     const paramRef = row.querySelector('.param-ref-input')?.value;
     const paramLocation = row.querySelector('.param-location-select').value;
+    const paramGroup = row.querySelector('.param-group-select')?.value || 'input';
     const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
     const paramRequired = row.querySelector('.param-required-checkbox').checked;
     const paramDefaultValue = row.querySelector('.param-default-input')?.value;
@@ -989,6 +990,7 @@ function collectParamFromRow(row, allowDefaultValue) {
         name: paramName,
         type: paramType,
         location: paramLocation,
+        group: paramGroup,
         is_array: paramIsArray,
         required: paramRequired
     };
@@ -1183,6 +1185,11 @@ function addParamRow(paramData = null, isDefaultParam = null) {
                 <option value="body" ${paramData && paramData.location === 'body' ? 'selected' : ''}>body</option>
                 <option value="path" ${paramData && paramData.location === 'path' ? 'selected' : ''}>path</option>
             </select>
+            <select class="param-group-select" title="参数组类型">
+                <option value="input" ${paramData && paramData.group === 'input' ? 'selected' : (!paramData ? 'selected' : '')}>input</option>
+                <option value="output" ${paramData && paramData.group === 'output' ? 'selected' : ''}>output</option>
+                <option value="fixed" ${paramData && paramData.group === 'fixed' ? 'selected' : ''}>fixed</option>
+            </select>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                 <input type="checkbox" class="param-array-checkbox" ${paramData && paramData.is_array ? 'checked' : ''} onchange="handleParamArrayChange(this)">
                 数组
@@ -1237,6 +1244,7 @@ function viewInterface(id) {
                                 <div class="field-meta">
                                     <span>${getParamTypeDisplay(param)}${param.is_array ? '[]' : ''}</span>
                                     <span>${param.location}</span>
+                                    <span class="badge-${param.group === 'input' ? 'primary' : param.group === 'output' ? 'success' : 'warning'}">${param.group || 'input'}</span>
                                     ${param.required ? '<span class="badge-danger">必填</span>' : ''}
                                     ${param.default_value ? `<span>默认值: ${param.default_value}</span>` : ''}
                                 </div>

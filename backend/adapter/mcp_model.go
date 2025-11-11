@@ -303,14 +303,21 @@ func applyDefaultsAndValidate(args map[string]any, params []models.InterfacePara
 		processedArgs[k] = v
 	}
 
-	// 构建参数索引
-	paramIndex := make(map[string]models.InterfaceParameter)
+	// 构建输入参数索引（只处理 input 组的参数）
+	inputParams := make(map[string]models.InterfaceParameter)
 	for _, p := range params {
-		paramIndex[p.Name] = p
+		if p.Group == "input" {
+			inputParams[p.Name] = p
+		}
 	}
 
-	// 应用默认值并验证
+	// 应用默认值并验证（只对 input 参数）
 	for _, p := range params {
+		// 只处理 input 组的参数
+		if p.Group != "input" {
+			continue
+		}
+
 		_, provided := processedArgs[p.Name]
 		// 如果参数未提供且有默认值，应用默认值
 		if !provided && p.DefaultValue != nil && *p.DefaultValue != "" {
@@ -320,7 +327,7 @@ func applyDefaultsAndValidate(args map[string]any, params []models.InterfacePara
 				return nil, fmt.Errorf("failed to convert default value for parameter %s: %w", p.Name, err)
 			}
 			processedArgs[p.Name] = convertedVal
-			log.Printf("Applied default value for parameter %s: %v", p.Name, convertedVal)
+			log.Printf("Applied default value for input parameter %s: %v", p.Name, convertedVal)
 		}
 		// 验证必填参数
 		if p.Required {

@@ -30,6 +30,7 @@ type CreateInterfaceParameterReq struct {
 	Required     bool    `json:"required"`                                                    // 是否必填
 	Description  string  `json:"description" validate:"max=16384"`                            // 参数描述
 	DefaultValue *string `json:"default_value"`                                               // 默认值
+	Group        string  `json:"group" validate:"required,oneof=input output fixed"`          // 参数组: input-输入参数, output-输出参数, fixed-固定参数
 }
 
 type GetInterfaceRequest struct {
@@ -67,6 +68,7 @@ type InterfaceParameterDTO struct {
 	Required     bool      `json:"required"`
 	Description  string    `json:"description"`
 	DefaultValue *string   `json:"default_value"`
+	Group        string    `json:"group"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -107,6 +109,7 @@ func toInterfaceParameterDTO(m models.InterfaceParameter) InterfaceParameterDTO 
 		Required:     m.Required,
 		Description:  m.Description,
 		DefaultValue: m.DefaultValue,
+		Group:        m.Group,
 		CreatedAt:    m.CreatedAt,
 		UpdatedAt:    m.UpdatedAt,
 	}
@@ -201,6 +204,7 @@ func CreateInterface(req CreateInterfaceRequest) (InterfaceResponse, error) {
 			Description: paramReq.Description,
 			// 需要确保 DefaultValue 可以匹配参数类型
 			DefaultValue: paramReq.DefaultValue,
+			Group:        paramReq.Group,
 		}
 		if err := tx.Create(&param).Error; err != nil {
 			tx.Rollback()
@@ -359,6 +363,7 @@ func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
 				Required:     paramReq.Required,
 				Description:  paramReq.Description,
 				DefaultValue: paramReq.DefaultValue,
+				Group:        paramReq.Group,
 			}
 			if err := tx.Create(&param).Error; err != nil {
 				tx.Rollback()

@@ -61,15 +61,21 @@ func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, ar
 	headers := make(http.Header)
 	pathParams := make(map[string]string)
 
-	// 构建参数索引
-	paramIndex := make(map[string]models.InterfaceParameter)
+	// 构建参数索引（按 Group 分类）
+	inputParams := make(map[string]models.InterfaceParameter)
+	fixedParams := make([]models.InterfaceParameter, 0)
 	for _, p := range params {
-		paramIndex[p.Name] = p
+		if p.Group == "input" {
+			inputParams[p.Name] = p
+		} else if p.Group == "fixed" {
+			fixedParams = append(fixedParams, p)
+		}
+		// output 参数不参与请求构建
 	}
 
-	// 应用提供的参数
+	// 应用用户提供的输入参数
 	for name, val := range args {
-		p, ok := paramIndex[name]
+		p, ok := inputParams[name]
 		if ok {
 			switch strings.ToLower(p.Location) {
 			case "query":
@@ -82,9 +88,35 @@ func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, ar
 				bodyMap[name] = val
 			}
 		} else {
-			// 如果参数未定义，默认放到 body
+			// 如果参数未在 input 中定义，默认放到 body
 			log.Printf("undefined parameter: %s, placing in body", name)
 			bodyMap[name] = val
+		}
+	}
+
+	// 应用固定参数（fixed），这些参数直接使用默认值
+	for _, p := range fixedParams {
+		if p.DefaultValue == nil || *p.DefaultValue == "" {
+			log.Printf("Warning: fixed parameter %s has no default value", p.Name)
+			continue
+		}
+		// 转换默认值
+		convertedVal, err := convertDefaultValue(*p.DefaultValue, p.Type)
+		if err != nil {
+			log.Printf("Warning: failed to convert fixed parameter %s: %v", p.Name, err)
+			continue
+		}
+
+		// 根据位置放置参数
+		switch strings.ToLower(p.Location) {
+		case "query":
+			queryVals.Set(p.Name, fmt.Sprintf("%v", convertedVal))
+		case "header":
+			headers.Set(p.Name, fmt.Sprintf("%v", convertedVal))
+		case "path":
+			pathParams[p.Name] = fmt.Sprintf("%v", convertedVal)
+		default: // body
+			bodyMap[p.Name] = convertedVal
 		}
 	}
 
