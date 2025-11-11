@@ -87,6 +87,11 @@ func BuildMcpInputSchemaByInterface(id int64) (map[string]any, error) {
 	required := make([]string, 0)
 	properties := make(map[string]any)
 	for _, field := range params {
+		if field.DefaultValue != nil &&
+			*field.DefaultValue != "" &&
+			!field.IsArray && field.Type != "custom" {
+			continue
+		}
 		property := make(map[string]any)
 		property["description"] = field.Description
 		if field.Required {
