@@ -145,14 +145,14 @@ func InitDefaultData() {
 		// 应用管理接口
 		{
 			Name:        "CreateApplication",
-			Description: "创建新应用。应用是接口的容器，每个应用可以包含多个接口。应用通过path字段对外暴露MCP服务，例如path='myapp'时，可通过/sse/myapp访问。protocol字段目前仅支持'sse'。",
+			Description: "创建新应用。应用是接口的容器，每个应用可以包含多个接口。应用通过path字段对外暴露MCP服务，例如path='myapp'时，protocol='sse'可通过/sse/myapp访问，protocol='streamable'可通过/streamable/myapp访问。",
 			URL:         "http://localhost:8080/api/applications",
 			Method:      "POST",
 			Parameters: []InterfaceParam{
 				{Name: "name", Type: "string", Location: "body", Required: true, Description: "应用名称，必须唯一"},
 				{Name: "description", Type: "string", Location: "body", Required: false, Description: "应用描述，用于说明应用的用途"},
 				{Name: "path", Type: "string", Location: "body", Required: true, Description: "应用路径标识，必须唯一，用于构建访问URL"},
-				{Name: "protocol", Type: "string", Location: "body", Required: true, Description: "应用对外协议，目前仅支持'sse'"},
+				{Name: "protocol", Type: "string", Location: "body", Required: true, Description: "应用对外协议，支持'sse'和'streamable'"},
 				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本，用于处理接口返回结果"},
 				{Name: "environment", Type: "string", Location: "body", Required: false, Description: "环境变量，JSON字符串格式"},
 				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用应用，默认为true"},
@@ -184,7 +184,7 @@ func InitDefaultData() {
 				{Name: "name", Type: "string", Location: "body", Required: false, Description: "应用名称，必须唯一"},
 				{Name: "description", Type: "string", Location: "body", Required: false, Description: "应用描述"},
 				{Name: "path", Type: "string", Location: "body", Required: false, Description: "应用路径标识，必须唯一"},
-				{Name: "protocol", Type: "string", Location: "body", Required: false, Description: "应用协议，目前仅支持'sse'"},
+				{Name: "protocol", Type: "string", Location: "body", Required: false, Description: "应用协议，支持'sse'和'streamable'"},
 				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本"},
 				{Name: "environment", Type: "string", Location: "body", Required: false, Description: "环境变量，JSON字符串格式"},
 				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用应用"},

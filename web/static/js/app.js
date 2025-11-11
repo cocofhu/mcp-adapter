@@ -181,6 +181,9 @@ function renderApplications(apps) {
                 </div>
             </div>
             <div class="card-footer">
+                <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); viewApplicationEndpoint(${app.id})">
+                    <i class="fas fa-eye"></i> 查看接口
+                </button>
                 <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); editApplication(${app.id})">
                     <i class="fas fa-edit"></i> 编辑
                 </button>
@@ -306,6 +309,47 @@ function viewApplication(id) {
             <p><strong>描述:</strong> ${app.description || '无'}</p>
         </div>
     `, null, false);
+}
+
+function viewApplicationEndpoint(id) {
+    const app = state.applications.find(a => a.id === id);
+    if (!app) return;
+    
+    const protocol = app.protocol || 'sse';
+    const path = app.path;
+    const baseUrl = window.location.origin;
+    
+    let endpointInfo = '';
+    if (protocol === 'sse') {
+        const sseEndpoint = `${baseUrl}/sse/${path}`;
+        const messageEndpoint = `${baseUrl}/message/${path}`;
+        endpointInfo = `
+            <div class="doc-section">
+                <h3>SSE 端点信息</h3>
+                <p><strong>SSE 端点:</strong></p>
+                <pre><code>${sseEndpoint}</code></pre>
+                <p><strong>消息端点:</strong></p>
+                <pre><code>${messageEndpoint}</code></pre>
+                <p class="text-muted" style="margin-top: 12px;">
+                    <i class="fas fa-info-circle"></i> SSE 端点用于建立服务器发送事件连接，消息端点用于发送客户端消息。
+                </p>
+            </div>
+        `;
+    } else if (protocol === 'streamable') {
+        const streamableEndpoint = `${baseUrl}/streamable/${path}`;
+        endpointInfo = `
+            <div class="doc-section">
+                <h3>Streamable 端点信息</h3>
+                <p><strong>Streamable 端点:</strong></p>
+                <pre><code>${streamableEndpoint}</code></pre>
+                <p class="text-muted" style="margin-top: 12px;">
+                    <i class="fas fa-info-circle"></i> Streamable 端点支持基于 HTTP 的流式传输协议。
+                </p>
+            </div>
+        `;
+    }
+    
+    showModal(`${app.name} - 接口信息`, endpointInfo, null, false);
 }
 
 function editApplication(id) {
