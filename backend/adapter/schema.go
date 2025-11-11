@@ -96,6 +96,7 @@ func buildMcpSchemaByInterface(id int64, group string) (map[string]any, error) {
 	properties := make(map[string]any)
 	for _, field := range params {
 		// 有默认值的非数组基础类型参数不需要用户输入，跳过
+		// 这里和fix同一个逻辑 后面可以去掉 这个版本先不去掉
 		if field.DefaultValue != nil &&
 			*field.DefaultValue != "" &&
 			!field.IsArray && field.Type != "custom" {
