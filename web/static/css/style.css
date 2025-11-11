@@ -646,6 +646,19 @@ body {
     font-size: 13px;
 }
 
+/* 复选框禁用样式 */
+.field-row input[type="checkbox"]:disabled,
+.param-row input[type="checkbox"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.field-row label:has(input[type="checkbox"]:disabled),
+.param-row label:has(input[type="checkbox"]:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* 删除按钮 - 小巧版本 */
 .btn-remove {
     padding: 4px 8px !important;

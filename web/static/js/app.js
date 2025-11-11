@@ -632,6 +632,36 @@ function handleParamTypeChange(selectElement) {
             defaultInput.value = ''; // 清空默认值
         }
     }
+    
+    // 更新必填复选框状态（默认参数中数组不能必填）
+    updateRequiredCheckboxState(row);
+}
+
+// 处理参数数组复选框变化
+function handleParamArrayChange(checkbox) {
+    const row = checkbox.closest('.param-row');
+    updateRequiredCheckboxState(row);
+}
+
+// 更新必填复选框状态（默认参数中数组不能必填）
+function updateRequiredCheckboxState(row) {
+    const arrayCheckbox = row.querySelector('.param-array-checkbox');
+    const requiredCheckbox = row.querySelector('.param-required-checkbox');
+    const defaultInput = row.querySelector('.param-default-input');
+    
+    // 只有在默认参数Tab中（存在默认值输入框）才需要此限制
+    if (defaultInput && arrayCheckbox && requiredCheckbox) {
+        const isArray = arrayCheckbox.checked;
+        
+        if (isArray) {
+            // 数组类型时禁用必填
+            requiredCheckbox.disabled = true;
+            requiredCheckbox.checked = false;
+        } else {
+            // 非数组类型时启用必填
+            requiredCheckbox.disabled = false;
+        }
+    }
 }
 
 function viewCustomType(id) {
@@ -1078,11 +1108,11 @@ function addParamRow(paramData = null, isDefaultParam = null) {
                 <option value="path" ${paramData && paramData.location === 'path' ? 'selected' : ''}>path</option>
             </select>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="param-array-checkbox" ${paramData && paramData.is_array ? 'checked' : ''}>
+                <input type="checkbox" class="param-array-checkbox" ${paramData && paramData.is_array ? 'checked' : ''} onchange="handleParamArrayChange(this)">
                 数组
             </label>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="param-required-checkbox" ${paramData && paramData.required ? 'checked' : ''}>
+                <input type="checkbox" class="param-required-checkbox" ${paramData && paramData.required ? 'checked' : ''} ${isDefaultParam && paramData && paramData.is_array ? 'disabled' : ''}>
                 必填
             </label>
             <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
@@ -1092,6 +1122,11 @@ function addParamRow(paramData = null, isDefaultParam = null) {
         ${defaultValueHTML}
     `;
     container.appendChild(row);
+    
+    // 初始化必填复选框状态
+    if (isDefaultParam) {
+        updateRequiredCheckboxState(row);
+    }
 }
 
 function viewInterface(id) {
