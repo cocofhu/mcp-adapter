@@ -137,8 +137,8 @@ func InitDefaultData() {
 		},
 		{
 			Name:        "CustomTypeResponse",
-			Description: "自定义类型响应数据",
-			Fields: []CustomTypeFieldDef{
+			Description: "自定义类型响应数据（包含字段列表）",
+			Fields:      []CustomTypeFieldDef{
 				{Name: "id", Type: "number", Required: true, Description: "类型ID"},
 				{Name: "app_id", Type: "number", Required: true, Description: "所属应用ID"},
 				{Name: "name", Type: "string", Required: true, Description: "类型名称"},
@@ -201,6 +201,22 @@ func InitDefaultData() {
 	interfaceResponseTypeID := customTypeIDs["InterfaceResponse"]
 	customTypeResponseTypeID := customTypeIDs["CustomTypeResponse"]
 	operationResultTypeID := customTypeIDs["OperationResult"]
+
+	// 为 CustomTypeResponse 添加 fields 字段（引用 CustomTypeField）
+	fieldsField := models.CustomTypeField{
+		CustomTypeID: customTypeResponseTypeID,
+		Name:         "fields",
+		Type:         "custom",
+		Ref:          &customTypeFieldTypeID,
+		IsArray:      true,
+		Required:     false,
+		Description:  "字段列表",
+	}
+	if err := db.Create(&fieldsField).Error; err != nil {
+		log.Printf("Failed to add fields field to CustomTypeResponse: %v", err)
+	} else {
+		log.Printf("Added fields field to CustomTypeResponse")
+	}
 
 	// 定义系统接口列表及其参数
 	interfaces := []InterfaceDefinition{
