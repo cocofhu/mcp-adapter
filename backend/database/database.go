@@ -11,7 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var DB *gorm.DB
+var dbInstance *gorm.DB
 
 // InitDatabase 初始化数据库连接
 func InitDatabase(dbPath string) {
@@ -40,20 +40,11 @@ func InitDatabase(dbPath string) {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
-	// 数据迁移：为现有的 InterfaceParameter 设置默认 Group 值
-	// 将所有 Group 为空的参数设置为 "input"
-	err = db.Exec("UPDATE interface_parameters SET `group` = 'input' WHERE `group` IS NULL OR `group` = ''").Error
-	if err != nil {
-		log.Printf("Warning: Failed to update existing parameters' group field: %v", err)
-	} else {
-		log.Println("Updated existing parameters with default group value")
-	}
-
-	DB = db
+	dbInstance = db
 	log.Println("Database connected and migrated successfully")
 }
 
 // GetDB 获取数据库实例
 func GetDB() *gorm.DB {
-	return DB
+	return dbInstance
 }
