@@ -329,19 +329,30 @@ func parseStructuredOutput(data []byte) (map[string]any, string, error) {
 	var out map[string]any
 	
 	// 尝试直接解析为 map[string]any
-	if err := json.Unmarshal(data, &out); err == nil {
+	firstErr := json.Unmarshal(data, &out)
+	if firstErr == nil {
 		return out, string(data), nil
 	}
 	
 	// 尝试先解析为字符串（处理双重编码）
 	var strData string
-	if err := json.Unmarshal(data, &strData); err != nil {
-		return nil, "", fmt.Errorf("invalid JSON format")
+	secondErr := json.Unmarshal(data, &strData)
+	if secondErr != nil {
+		// 两种方式都失败，返回详细的错误信息
+		dataPreview := string(data)
+		if len(dataPreview) > 200 {
+			dataPreview = dataPreview[:200] + "..."
+		}
+		return nil, "", fmt.Errorf("invalid JSON format, first error: %v, second error: %v, data: %s", firstErr, secondErr, dataPreview)
 	}
 	
 	// 再次解析字符串内容
 	if err := json.Unmarshal([]byte(strData), &out); err != nil {
-		return nil, "", err
+		strPreview := strData
+		if len(strPreview) > 200 {
+			strPreview = strPreview[:200] + "..."
+		}
+		return nil, "", fmt.Errorf("failed to parse inner JSON string: %v, data: %s", err, strPreview)
 	}
 	
 	return out, strData, nil
