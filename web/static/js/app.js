@@ -789,7 +789,7 @@ async function deleteCustomType(id) {
 
 // 接口表单状态
 let currentInterfaceId = null;
-let currentParamsTab = 'default'; // 当前激活的参数Tab
+let currentParamsTab = 'input'; // 当前激活的参数Tab
 
 // 切换参数Tab
 function switchParamsTab(tab) {
@@ -804,18 +804,30 @@ function switchParamsTab(tab) {
         }
     });
     
-    // 更新Tab内容显示
-    if (tab === 'default') {
-        document.getElementById('default-params-container').style.display = 'block';
-        document.getElementById('default-params-container').classList.add('active');
-        document.getElementById('regular-params-container').style.display = 'none';
-        document.getElementById('regular-params-container').classList.remove('active');
-    } else {
-        document.getElementById('default-params-container').style.display = 'none';
-        document.getElementById('default-params-container').classList.remove('active');
-        document.getElementById('regular-params-container').style.display = 'block';
-        document.getElementById('regular-params-container').classList.add('active');
+    // 更新Tab描述显示
+    document.querySelectorAll('.tab-desc').forEach(desc => {
+        desc.style.display = 'none';
+    });
+    const descId = `${tab}-tab-desc`;
+    const descElem = document.getElementById(descId);
+    if (descElem) {
+        descElem.style.display = 'block';
     }
+    
+    // 更新Tab内容显示
+    const containers = ['input-params-container', 'output-params-container', 'fixed-params-container'];
+    containers.forEach(containerId => {
+        const container = document.getElementById(containerId);
+        if (container) {
+            if (containerId === `${tab}-params-container`) {
+                container.style.display = 'block';
+                container.classList.add('active');
+            } else {
+                container.style.display = 'none';
+                container.classList.remove('active');
+            }
+        }
+    });
 }
 
 // 显示接口表单
@@ -837,16 +849,17 @@ async function showInterfaceForm(interfaceId = null) {
     }
     
     currentInterfaceId = interfaceId;
-    currentParamsTab = 'default'; // 重置为默认Tab
+    currentParamsTab = 'input'; // 重置为 input Tab
     document.getElementById('interface-list-view').style.display = 'none';
     document.getElementById('interface-form-view').style.display = 'block';
     
     // 清空参数容器
-    document.getElementById('default-params-container').innerHTML = '';
-    document.getElementById('regular-params-container').innerHTML = '';
+    document.getElementById('input-params-container').innerHTML = '';
+    document.getElementById('output-params-container').innerHTML = '';
+    document.getElementById('fixed-params-container').innerHTML = '';
     
     // 重置Tab状态
-    switchParamsTab('default');
+    switchParamsTab('input');
     
     if (interfaceId) {
         // 编辑模式
@@ -861,15 +874,10 @@ async function showInterfaceForm(interfaceId = null) {
             document.getElementById('interface-url').value = iface.url;
             document.getElementById('interface-auth').value = iface.auth_type;
             
-            // 加载参数，根据是否有默认值分配到不同Tab
+            // 加载参数，根据 group 分配到不同Tab
             if (iface.parameters && iface.parameters.length > 0) {
                 iface.parameters.forEach(param => {
-                    // 如果参数有默认值，添加到默认参数Tab，否则添加到普通参数Tab
-                    if (param.default_value !== undefined && param.default_value !== null && param.default_value !== '') {
-                        addParamRow(param, true);
-                    } else {
-                        addParamRow(param, false);
-                    }
+                    addParamRow(param);
                 });
             }
         }
@@ -919,16 +927,13 @@ document.getElementById('interface-form-submit').addEventListener('click', async
     
     const parameters = [];
     
-    // 收集默认参数（可以有默认值）
-    document.querySelectorAll('#default-params-container .param-row').forEach(row => {
-        const param = collectParamFromRow(row, true);
-        if (param) parameters.push(param);
-    });
-    
-    // 收集普通参数（不应有默认值）
-    document.querySelectorAll('#regular-params-container .param-row').forEach(row => {
-        const param = collectParamFromRow(row, false);
-        if (param) parameters.push(param);
+    // 收集所有三个 Tab 的参数
+    ['input', 'output', 'fixed'].forEach(tabName => {
+        const containerId = `${tabName}-params-container`;
+        document.querySelectorAll(`#${containerId} .param-row`).forEach(row => {
+            const param = collectParamFromRow(row);
+            if (param) parameters.push(param);
+        });
     });
     
     try {
@@ -973,12 +978,12 @@ document.getElementById('interface-form-submit').addEventListener('click', async
 });
 
 // 从参数行收集数据的辅助函数
-function collectParamFromRow(row, allowDefaultValue) {
+function collectParamFromRow(row) {
     const paramName = row.querySelector('.param-name-input').value;
     const paramType = row.querySelector('.param-type-select').value;
     const paramRef = row.querySelector('.param-ref-input')?.value;
     const paramLocation = row.querySelector('.param-location-select').value;
-    const paramGroup = row.querySelector('.param-group-select')?.value || 'input';
+    const paramGroup = row.querySelector('.param-group-input')?.value || 'input';
     const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
     const paramRequired = row.querySelector('.param-required-checkbox').checked;
     const paramDefaultValue = row.querySelector('.param-default-input')?.value;
@@ -999,9 +1004,9 @@ function collectParamFromRow(row, allowDefaultValue) {
         param.ref = parseInt(paramRef);
     }
     
-    // 只有在允许默认值的Tab中，且参数类型为基本类型时，才保存默认值
+    // 保存默认值（如果有）
     const isBasicType = ['string', 'number', 'boolean'].includes(paramType);
-    if (allowDefaultValue && isBasicType && paramDefaultValue) {
+    if (isBasicType && paramDefaultValue) {
         param.default_value = paramDefaultValue;
     }
     
@@ -1118,19 +1123,18 @@ function getMethodColor(method) {
     return colors[method] || 'secondary';
 }
 
-function addParamRow(paramData = null, isDefaultParam = null) {
-    // 如果没有指定是否为默认参数，则根据当前Tab和参数数据判断
-    if (isDefaultParam === null) {
-        if (paramData && paramData.default_value !== undefined && paramData.default_value !== null && paramData.default_value !== '') {
-            isDefaultParam = true;
-        } else {
-            isDefaultParam = (currentParamsTab === 'default');
-        }
-    }
+function addParamRow(paramData = null) {
+    // 确定参数组类型：从参数数据获取，或使用当前激活的 Tab
+    const group = paramData && paramData.group ? paramData.group : currentParamsTab;
     
-    const container = isDefaultParam ? 
-        document.getElementById('default-params-container') : 
-        document.getElementById('regular-params-container');
+    // 根据 group 选择对应的容器
+    const containerId = `${group}-params-container`;
+    const container = document.getElementById(containerId);
+    
+    if (!container) {
+        console.error(`Container not found for group: ${group}`);
+        return;
+    }
     
     const row = document.createElement('div');
     row.className = 'param-row mb-2';
@@ -1160,10 +1164,15 @@ function addParamRow(paramData = null, isDefaultParam = null) {
     const currentType = paramData ? paramData.type : 'string';
     const isBasicType = ['string', 'number', 'boolean'].includes(currentType);
     
-    // 只有默认参数且类型为基本类型时才显示默认值输入框
-    const defaultValueHTML = isDefaultParam ? `
+    // Fixed 参数需要显示默认值输入框（必填）
+    // Input 参数可选显示默认值
+    // Output 参数不需要默认值
+    const showDefaultValue = (group === 'fixed') || (group === 'input' && isBasicType);
+    const defaultValueRequired = (group === 'fixed') ? '（必填）' : '（可选）';
+    
+    const defaultValueHTML = showDefaultValue ? `
         <div class="form-row param-extra-row" style="margin-top: 4px;">
-            <input type="text" class="param-default-input" placeholder="默认值（可选）" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1; ${isBasicType ? '' : 'display: none;'}">
+            <input type="text" class="param-default-input" placeholder="默认值${defaultValueRequired}" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1; ${isBasicType ? '' : 'display: none;'}">
             <input type="text" class="param-desc-input" placeholder="参数描述（可选）" value="${paramData && paramData.description ? paramData.description : ''}" style="flex: 1;">
         </div>
     ` : `
@@ -1179,23 +1188,19 @@ function addParamRow(paramData = null, isDefaultParam = null) {
                 ${buildTypeOptions()}
             </select>
             <input type="hidden" class="param-ref-input" value="${paramData && paramData.ref ? paramData.ref : ''}">
+            <input type="hidden" class="param-group-input" value="${group}">
             <select class="param-location-select">
                 <option value="query" ${paramData && paramData.location === 'query' ? 'selected' : ''}>query</option>
                 <option value="header" ${paramData && paramData.location === 'header' ? 'selected' : ''}>header</option>
                 <option value="body" ${paramData && paramData.location === 'body' ? 'selected' : ''}>body</option>
                 <option value="path" ${paramData && paramData.location === 'path' ? 'selected' : ''}>path</option>
             </select>
-            <select class="param-group-select" title="参数组类型">
-                <option value="input" ${paramData && paramData.group === 'input' ? 'selected' : (!paramData ? 'selected' : '')}>input</option>
-                <option value="output" ${paramData && paramData.group === 'output' ? 'selected' : ''}>output</option>
-                <option value="fixed" ${paramData && paramData.group === 'fixed' ? 'selected' : ''}>fixed</option>
-            </select>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                 <input type="checkbox" class="param-array-checkbox" ${paramData && paramData.is_array ? 'checked' : ''} onchange="handleParamArrayChange(this)">
                 数组
             </label>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="param-required-checkbox" ${paramData && paramData.required ? 'checked' : ''} ${isDefaultParam && paramData && paramData.is_array ? 'disabled' : ''}>
+                <input type="checkbox" class="param-required-checkbox" ${paramData && paramData.required ? 'checked' : ''} ${group === 'fixed' ? 'checked disabled' : ''}>
                 必填
             </label>
             <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
@@ -1204,12 +1209,16 @@ function addParamRow(paramData = null, isDefaultParam = null) {
         </div>
         ${defaultValueHTML}
     `;
-    container.appendChild(row);
     
-    // 初始化必填复选框状态
-    if (isDefaultParam) {
-        updateRequiredCheckboxState(row);
+    // Fixed 参数默认为必填且不可修改
+    if (group === 'fixed') {
+        const requiredCheckbox = row.querySelector('.param-required-checkbox');
+        if (requiredCheckbox) {
+            requiredCheckbox.checked = true;
+            requiredCheckbox.disabled = true;
+        }
     }
+    container.appendChild(row);
 }
 
 function viewInterface(id) {

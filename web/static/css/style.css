@@ -633,11 +633,6 @@ body {
     flex: 1 1 100px;
 }
 
-.field-row .param-group-select,
-.param-row .param-group-select {
-    flex: 1 1 90px;
-}
-
 .field-row .field-desc-input,
 .param-row .field-desc-input {
     width: 100%;
@@ -1008,9 +1003,32 @@ body {
     background: var(--bg-primary);
 }
 
+.params-tab-btn i {
+    margin-right: 6px;
+}
+
 .params-tab-content {
     padding: 16px;
     min-height: 200px;
+}
+
+.params-tab-description {
+    margin-bottom: 16px;
+}
+
+.params-tab-description .tab-desc {
+    padding: 12px 16px;
+    background: #f0f9ff;
+    border-left: 3px solid var(--info-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.params-tab-description .tab-desc i {
+    color: var(--info-color);
+    margin-right: 8px;
 }
 
 .params-tab-pane {

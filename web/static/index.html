@@ -268,16 +268,34 @@
                             <label>参数定义</label>
                             <div class="params-tabs">
                                 <div class="params-tab-header">
-                                    <button type="button" class="params-tab-btn active" data-tab="default" onclick="switchParamsTab('default')">
-                                        默认参数
+                                    <button type="button" class="params-tab-btn active" data-tab="input" onclick="switchParamsTab('input')">
+                                        <i class="fas fa-sign-in-alt"></i> Input 参数
                                     </button>
-                                    <button type="button" class="params-tab-btn" data-tab="regular" onclick="switchParamsTab('regular')">
-                                        普通参数
+                                    <button type="button" class="params-tab-btn" data-tab="output" onclick="switchParamsTab('output')">
+                                        <i class="fas fa-sign-out-alt"></i> Output 参数
+                                    </button>
+                                    <button type="button" class="params-tab-btn" data-tab="fixed" onclick="switchParamsTab('fixed')">
+                                        <i class="fas fa-lock"></i> Fixed 参数
                                     </button>
                                 </div>
                                 <div class="params-tab-content">
-                                    <div id="default-params-container" class="params-tab-pane active"></div>
-                                    <div id="regular-params-container" class="params-tab-pane" style="display: none;"></div>
+                                    <div class="params-tab-description">
+                                        <p id="input-tab-desc" class="tab-desc active">
+                                            <i class="fas fa-info-circle"></i>
+                                            <strong>Input 参数：</strong>用户在调用接口时需要提供的参数，会显示在 MCP Schema 中
+                                        </p>
+                                        <p id="output-tab-desc" class="tab-desc" style="display: none;">
+                                            <i class="fas fa-info-circle"></i>
+                                            <strong>Output 参数：</strong>从接口响应中提取的字段（暂未实现，用于文档标记）
+                                        </p>
+                                        <p id="fixed-tab-desc" class="tab-desc" style="display: none;">
+                                            <i class="fas fa-info-circle"></i>
+                                            <strong>Fixed 参数：</strong>使用默认值的固定参数，不允许用户修改，不显示在 MCP Schema 中
+                                        </p>
+                                    </div>
+                                    <div id="input-params-container" class="params-tab-pane active"></div>
+                                    <div id="output-params-container" class="params-tab-pane" style="display: none;"></div>
+                                    <div id="fixed-params-container" class="params-tab-pane" style="display: none;"></div>
                                 </div>
                             </div>
                             <button type="button" class="btn btn-secondary mt-2" onclick="addParamRow()">
