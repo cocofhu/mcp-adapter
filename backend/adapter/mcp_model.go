@@ -432,7 +432,7 @@ func (sm *ServerManager) addApplication(app *models.Application) error {
 			impl: server.NewStreamableHTTPServer(
 				mcpServer,
 				server.WithEndpointPath(fmt.Sprintf("/streamable/%s", app.Path)),
-				server.WithStateLess(false),
+				server.WithStateLess(true),
 			),
 			cleanupFns: make([]func(), 0),
 		}
