@@ -77,7 +77,7 @@ type InterfaceParameter struct {
 	Required     bool           `json:"required"`                                           // 添加必填标识
 	Description  string         `json:"description" gorm:"size:16384"`
 	DefaultValue *string        `json:"default_value"`
-	Group        string         `json:"group" validate:"oneof=input output fixed"`          // input: 输入参数, output: 输出参数, fixed: 固定参数(不允许修改)
+	Group        string         `json:"group" validate:"oneof=input output fixed"` // input: 输入参数, output: 输出参数, fixed: 固定参数(不允许修改)
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`

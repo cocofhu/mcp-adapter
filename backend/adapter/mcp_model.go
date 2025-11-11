@@ -282,15 +282,15 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			shouldStructuredOutput = true
 		}
 
-	// 创建工具的副本以避免闭包捕获
-	ifaceCopy := *iface
-	// 创建参数副本，缓存参数信息避免在调用时查库
-	paramsCopy := make([]models.InterfaceParameter, len(params))
-	copy(paramsCopy, params)
-	// 创建 outputSchema 的副本
-	outputSchemaCopy := outputSchema
+		// 创建工具的副本以避免闭包捕获
+		ifaceCopy := *iface
+		// 创建参数副本，缓存参数信息避免在调用时查库
+		paramsCopy := make([]models.InterfaceParameter, len(params))
+		copy(paramsCopy, params)
+		// 创建 outputSchema 的副本
+		outputSchemaCopy := outputSchema
 
-	srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := req.GetArguments()
 
 			// 应用默认值并验证参数
@@ -306,15 +306,16 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			if code != http.StatusOK {
 				log.Printf("Error calling tool %s, code: %d", ifaceCopy.Name, code)
 			}
-		if shouldStructuredOutput {
-			out, text, err := parseStructuredOutput(data, outputSchemaCopy)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("failed to parse structured output: %v", err)), nil
+			if shouldStructuredOutput {
+				out, text, err := parseStructuredOutput(data, outputSchemaCopy)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("failed to parse structured output: %v", err)), nil
+				}
+				filtered := filterOutputBySchema(out, outputSchemaCopy)
+
+				return mcp.NewToolResultStructured(filtered, text), nil
 			}
-			filtered := filterOutputBySchema(out, outputSchemaCopy)
-			return mcp.NewToolResultStructured(filtered, text), nil
-		}
-		return mcp.NewToolResultText(string(data)), nil
+			return mcp.NewToolResultText(string(data)), nil
 		})
 
 		log.Printf("Added tool: %s", iface.Name)
@@ -331,13 +332,13 @@ func parseStructuredOutput(data []byte, outputSchema map[string]any) (map[string
 	if err := json.Unmarshal(data, &genericData); err != nil {
 		return nil, "", fmt.Errorf("invalid JSON: %v", err)
 	}
-	
+
 	// 检查解析结果的类型
 	switch v := genericData.(type) {
 	case map[string]any:
 		// 直接是对象，返回
 		return v, string(data), nil
-		
+
 	case []any:
 		// 是数组，需要包装成对象
 		// 检查 schema 的顶层 type，如果是 array，则包装；否则报错
@@ -362,7 +363,7 @@ func parseStructuredOutput(data []byte, outputSchema map[string]any) (map[string
 		// 都不是，使用默认的 "items" 包装
 		wrapped := map[string]any{"items": v}
 		return wrapped, string(data), nil
-		
+
 	case string:
 		// 可能是双重编码的 JSON 字符串
 		var out map[string]any
@@ -376,7 +377,7 @@ func parseStructuredOutput(data []byte, outputSchema map[string]any) (map[string
 			return nil, "", fmt.Errorf("failed to parse inner JSON string: %v", err)
 		}
 		return out, v, nil
-		
+
 	default:
 		return nil, "", fmt.Errorf("unsupported JSON type: %T", genericData)
 	}
@@ -416,11 +417,11 @@ func filterValueBySchema(value any, schema any) any {
 	// 检查 schema 是否有嵌套的 properties（不依赖 type 字段）
 	if properties, ok := schemaMap["properties"].(map[string]any); ok {
 		// 如果 properties 本身又有 properties，说明有多层嵌套
-		if nestedProps, hasNested := properties["properties"].(map[string]any); hasNested {
+		if _, hasNested := properties["properties"].(map[string]any); hasNested {
 			// 递归处理，使用内层的 properties 作为真正的 schema
 			return filterValueBySchema(value, properties)
 		}
-		
+
 		// 正常的对象类型，使用 properties 过滤
 		if valueMap, ok := value.(map[string]any); ok {
 			filtered := make(map[string]any)
