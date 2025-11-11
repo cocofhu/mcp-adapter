@@ -2,10 +2,13 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"mcp-adapter/backend/adapter"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type CreateInterfaceRequest struct {
@@ -156,27 +159,9 @@ func CreateInterface(req CreateInterfaceRequest) (InterfaceResponse, error) {
 		return InterfaceResponse{}, errors.New("interface name already exists in the application")
 	}
 
-	// 验证参数的 Ref 引用和 fixed 参数规则
-	for _, param := range req.Parameters {
-		if param.Type == "custom" && param.Ref != nil {
-			var refType models.CustomType
-			if err := db.First(&refType, *param.Ref).Error; err != nil {
-				return InterfaceResponse{}, errors.New("invalid parameter reference: custom type not found")
-			}
-			if refType.AppID != req.AppID {
-				return InterfaceResponse{}, errors.New("parameter reference must belong to the same application")
-			}
-		}
-		
-		// fixed 参数必须有默认值且不能是数组
-		if param.Group == "fixed" {
-			if param.DefaultValue == nil || *param.DefaultValue == "" {
-				return InterfaceResponse{}, errors.New("fixed parameter must have a default value")
-			}
-			if param.IsArray {
-				return InterfaceResponse{}, errors.New("fixed parameter cannot be an array")
-			}
-		}
+	err := checkParameters(&req.Parameters, db, req.AppID)
+	if err != nil {
+		return InterfaceResponse{}, err
 	}
 
 	// 创建接口
@@ -344,31 +329,10 @@ func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
 	// 如果提供了参数列表，则完全替换
 	var params []models.InterfaceParameter
 	if req.Parameters != nil {
-		// 验证参数的 Ref 引用和 fixed 参数规则
-		for _, paramReq := range *req.Parameters {
-			if paramReq.Type == "custom" && paramReq.Ref != nil {
-				var refType models.CustomType
-				if err := tx.First(&refType, *paramReq.Ref).Error; err != nil {
-					tx.Rollback()
-					return InterfaceResponse{}, errors.New("invalid parameter reference: custom type not found")
-				}
-				if refType.AppID != existing.AppID {
-					tx.Rollback()
-					return InterfaceResponse{}, errors.New("parameter reference must belong to the same application")
-				}
-			}
-			
-			// fixed 参数必须有默认值且不能是数组
-			if paramReq.Group == "fixed" {
-				if paramReq.DefaultValue == nil || *paramReq.DefaultValue == "" {
-					tx.Rollback()
-					return InterfaceResponse{}, errors.New("fixed parameter must have a default value")
-				}
-				if paramReq.IsArray {
-					tx.Rollback()
-					return InterfaceResponse{}, errors.New("fixed parameter cannot be an array")
-				}
-			}
+		err := checkParameters(req.Parameters, tx, existing.AppID)
+		if err != nil {
+			tx.Rollback()
+			return InterfaceResponse{}, err
 		}
 		// 删除旧参数
 		tx.Where("interface_id = ?", existing.ID).Delete(&models.InterfaceParameter{})
@@ -410,6 +374,79 @@ func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
 		Code:      adapter.AddToolEvent,
 	})
 	return InterfaceResponse{Interface: toInterfaceDTO(existing, params)}, nil
+}
+
+func checkParameters(parameters *[]CreateInterfaceParameterReq, tx *gorm.DB, appId int64) error {
+	// 验证参数的 Ref 引用和 fixed 参数规则
+	for _, paramReq := range *parameters {
+		if paramReq.Group == "output" {
+			// 出参不能有默认值
+			if paramReq.DefaultValue != nil && *paramReq.DefaultValue != "" {
+				return errors.New("output parameters cannot have default values")
+			}
+		}
+		if paramReq.IsArray {
+			// 数组类型不能有默认值
+			if paramReq.DefaultValue != nil && *paramReq.DefaultValue != "" {
+				return errors.New("array type parameters cannot have default values")
+			}
+		}
+		if paramReq.Type == "custom" {
+			// 如果不存在引用报错
+			if paramReq.Ref == nil {
+				return errors.New("parameter reference must be provided for custom type")
+			} else {
+				// 数据库没有该引用报错
+				var refType models.CustomType
+				if err := tx.First(&refType, *paramReq.Ref).Error; err != nil {
+					return errors.New("invalid parameter reference: custom type not found")
+				}
+				if refType.AppID != appId {
+					return errors.New("parameter reference must belong to the same application")
+				}
+			}
+			// custom类型 不是output参数且位置不是body报错
+			if paramReq.Group != "output" && paramReq.Location != "body" {
+				return errors.New("custom type parameters must be located in body")
+			}
+			// 复杂类型不能有默认值
+			if paramReq.DefaultValue != nil && *paramReq.DefaultValue != "" {
+				return errors.New("custom type parameters cannot have default values")
+			}
+		} else {
+			if paramReq.DefaultValue != nil && *paramReq.DefaultValue != "" {
+				// 基础类型 检查默认值是否匹配类型
+				switch paramReq.Type {
+				case "number":
+					var num float64
+					_, err := fmt.Sscanf(*paramReq.DefaultValue, "%f", &num)
+					if err != nil {
+						return errors.New("default value does not match parameter type 'number'")
+					}
+				case "boolean":
+					var b bool
+					_, err := fmt.Sscanf(*paramReq.DefaultValue, "%t", &b)
+					if err != nil {
+						return errors.New("default value does not match parameter type 'boolean'")
+					}
+				case "string":
+					// 字符串类型默认值总是匹配
+				default:
+					return errors.New("unknown parameter type")
+				}
+			}
+		}
+		// fixed 参数必须有默认值且不能是数组
+		if paramReq.Group == "fixed" {
+			if paramReq.DefaultValue == nil || *paramReq.DefaultValue == "" {
+				return errors.New("fixed parameter must have a default value")
+			}
+			if paramReq.IsArray {
+				return errors.New("fixed parameter cannot be an array")
+			}
+		}
+	}
+	return nil
 }
 
 func DeleteInterface(req DeleteInterfaceRequest) (EmptyResponse, error) {
