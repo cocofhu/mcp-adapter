@@ -31,6 +31,9 @@ func main() {
 		}
 	}()
 
+	// 初始化默认数据（首次启动时创建 MCP-Adapter 应用及其接口）
+	database.InitDefaultData()
+
 	// 初始化 MCP 服务器管理器
 	adapter.InitServer()
 

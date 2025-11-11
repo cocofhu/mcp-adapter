@@ -59,6 +59,7 @@ func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, ar
 	queryVals := url.Values{}
 	bodyMap := make(map[string]any)
 	headers := make(http.Header)
+	pathParams := make(map[string]string)
 
 	// 构建参数索引
 	paramIndex := make(map[string]models.InterfaceParameter)
@@ -76,13 +77,13 @@ func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, ar
 			case "header":
 				headers.Set(name, fmt.Sprintf("%v", val))
 			case "path":
-				log.Printf("unhandled path parameter: %s", name)
+				pathParams[name] = fmt.Sprintf("%v", val)
 			default: // body
 				bodyMap[name] = val
 			}
 		} else {
 			// 如果参数未定义，默认放到 body
-			log.Printf("unhandled path parameter: %s", name)
+			log.Printf("undefined parameter: %s, placing in body", name)
 			bodyMap[name] = val
 		}
 	}
@@ -95,8 +96,16 @@ func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, ar
 		bodyMap = map[string]any{}
 	}
 
+	// 替换 URL 中的 path 参数
+	finalURL := iface.URL
+	for name, value := range pathParams {
+		// 支持 {name} 和 :name 两种格式
+		finalURL = strings.ReplaceAll(finalURL, "{"+name+"}", value)
+		finalURL = strings.ReplaceAll(finalURL, ":"+name, value)
+	}
+
 	// Build URL with query
-	u, err := url.Parse(iface.URL)
+	u, err := url.Parse(finalURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid url: %w", err)
 	}
