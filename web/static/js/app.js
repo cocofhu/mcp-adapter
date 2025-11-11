@@ -12,6 +12,33 @@ const state = {
 
 // ========== 工具函数 ==========
 
+// HTML 转义函数，防止 XSS
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 日期格式化函数
+function formatDate(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return '今天';
+    if (diffDays === 1) return '昨天';
+    if (diffDays < 7) return `${diffDays}天前`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}周前`;
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // 显示 Toast 通知
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
@@ -160,40 +187,52 @@ function renderApplications(apps) {
         return;
     }
     
-    grid.innerHTML = filteredApps.map(app => `
+    grid.innerHTML = filteredApps.map(app => {
+        // 处理描述文本，限制长度
+        const description = app.description || '暂无描述';
+        const displayDesc = description.length > 120 ? description.substring(0, 120) + '...' : description;
+        
+        return `
         <div class="card" onclick="viewApplication(${app.id})">
             <div class="card-header">
-                <div>
-                    <div class="card-title">${app.name}</div>
-                    <div class="card-subtitle">${app.path || '/'}</div>
+                <div style="flex: 1; min-width: 0;">
+                    <div class="card-title" title="${escapeHtml(app.name)}">${escapeHtml(app.name)}</div>
+                    <div class="card-subtitle">路径: /${app.path || ''}</div>
                 </div>
                 <span class="card-badge badge-${app.enabled ? 'success' : 'warning'}">
                     ${app.enabled ? '已启用' : '已禁用'}
                 </span>
             </div>
             <div class="card-body">
-                <p class="card-subtitle">${app.description || '暂无描述'}</p>
+                <div class="card-subtitle" title="${escapeHtml(description)}">${escapeHtml(displayDesc)}</div>
                 <div class="card-meta">
                     <div class="card-meta-item">
                         <i class="fas fa-network-wired"></i>
-                        ${app.protocol || 'http'}
+                        ${app.protocol?.toUpperCase() || 'HTTP'}
+                    </div>
+                    <div class="card-meta-item">
+                        <i class="fas fa-calendar"></i>
+                        ${formatDate(app.created_at)}
                     </div>
                 </div>
             </div>
             <div class="card-footer">
-                <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); viewApplicationEndpoint(${app.id})">
-                    <i class="fas fa-link"></i> 接入链接
+                <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); viewApplicationEndpoint(${app.id})" title="查看 MCP 接入链接">
+                    <i class="fas fa-link"></i> 接入
                 </button>
-                <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); manageApplicationInterfaces(${app.id})">
-                    <i class="fas fa-plug"></i> 接口管理
+                <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); manageApplicationInterfaces(${app.id})" title="管理此应用的接口">
+                    <i class="fas fa-plug"></i> 接口
                 </button>
-                <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); editApplication(${app.id})">
+                <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); editApplication(${app.id})" title="编辑应用信息">
                     <i class="fas fa-edit"></i> 编辑
                 </button>
-                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteApplication(${app.id})">
+                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteApplication(${app.id})" title="删除此应用">
                     <i class="fas fa-trash"></i> 删除
                 </button>
             </div>
+        </div>
+        `;
+    }).join('');
         </div>
     `).join('');
 }
