@@ -660,6 +660,34 @@ async function deleteCustomType(id) {
 
 // 接口表单状态
 let currentInterfaceId = null;
+let currentParamsTab = 'default'; // 当前激活的参数Tab
+
+// 切换参数Tab
+function switchParamsTab(tab) {
+    currentParamsTab = tab;
+    
+    // 更新Tab按钮状态
+    document.querySelectorAll('.params-tab-btn').forEach(btn => {
+        if (btn.dataset.tab === tab) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+    
+    // 更新Tab内容显示
+    if (tab === 'default') {
+        document.getElementById('default-params-container').style.display = 'block';
+        document.getElementById('default-params-container').classList.add('active');
+        document.getElementById('regular-params-container').style.display = 'none';
+        document.getElementById('regular-params-container').classList.remove('active');
+    } else {
+        document.getElementById('default-params-container').style.display = 'none';
+        document.getElementById('default-params-container').classList.remove('active');
+        document.getElementById('regular-params-container').style.display = 'block';
+        document.getElementById('regular-params-container').classList.add('active');
+    }
+}
 
 // 显示接口表单
 async function showInterfaceForm(interfaceId = null) {
@@ -680,11 +708,16 @@ async function showInterfaceForm(interfaceId = null) {
     }
     
     currentInterfaceId = interfaceId;
+    currentParamsTab = 'default'; // 重置为默认Tab
     document.getElementById('interface-list-view').style.display = 'none';
     document.getElementById('interface-form-view').style.display = 'block';
     
     // 清空参数容器
-    document.getElementById('params-container').innerHTML = '';
+    document.getElementById('default-params-container').innerHTML = '';
+    document.getElementById('regular-params-container').innerHTML = '';
+    
+    // 重置Tab状态
+    switchParamsTab('default');
     
     if (interfaceId) {
         // 编辑模式
@@ -699,10 +732,15 @@ async function showInterfaceForm(interfaceId = null) {
             document.getElementById('interface-url').value = iface.url;
             document.getElementById('interface-auth').value = iface.auth_type;
             
-            // 加载参数
+            // 加载参数，根据是否有默认值分配到不同Tab
             if (iface.parameters && iface.parameters.length > 0) {
                 iface.parameters.forEach(param => {
-                    addParamRow(param);
+                    // 如果参数有默认值，添加到默认参数Tab，否则添加到普通参数Tab
+                    if (param.default_value !== undefined && param.default_value !== null && param.default_value !== '') {
+                        addParamRow(param, true);
+                    } else {
+                        addParamRow(param, false);
+                    }
                 });
             }
         }
@@ -751,39 +789,17 @@ document.getElementById('interface-form-submit').addEventListener('click', async
     }
     
     const parameters = [];
-    document.querySelectorAll('.param-row').forEach(row => {
-        const paramName = row.querySelector('.param-name-input').value;
-        const paramType = row.querySelector('.param-type-select').value;
-        const paramRef = row.querySelector('.param-ref-input')?.value;
-        const paramLocation = row.querySelector('.param-location-select').value;
-        const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
-        const paramRequired = row.querySelector('.param-required-checkbox').checked;
-        const paramDefaultValue = row.querySelector('.param-default-input')?.value;
-        const paramDescription = row.querySelector('.param-desc-input')?.value;
-        
-        if (paramName) {
-            const param = {
-                name: paramName,
-                type: paramType,
-                location: paramLocation,
-                is_array: paramIsArray,
-                required: paramRequired
-            };
-            
-            if (paramType === 'custom' && paramRef) {
-                param.ref = parseInt(paramRef);
-            }
-            
-            if (paramDefaultValue) {
-                param.default_value = paramDefaultValue;
-            }
-            
-            if (paramDescription) {
-                param.description = paramDescription;
-            }
-            
-            parameters.push(param);
-        }
+    
+    // 收集默认参数（可以有默认值）
+    document.querySelectorAll('#default-params-container .param-row').forEach(row => {
+        const param = collectParamFromRow(row, true);
+        if (param) parameters.push(param);
+    });
+    
+    // 收集普通参数（不应有默认值）
+    document.querySelectorAll('#regular-params-container .param-row').forEach(row => {
+        const param = collectParamFromRow(row, false);
+        if (param) parameters.push(param);
     });
     
     try {
@@ -826,6 +842,43 @@ document.getElementById('interface-form-submit').addEventListener('click', async
         showToast('操作失败: ' + error.message, 'error');
     }
 });
+
+// 从参数行收集数据的辅助函数
+function collectParamFromRow(row, allowDefaultValue) {
+    const paramName = row.querySelector('.param-name-input').value;
+    const paramType = row.querySelector('.param-type-select').value;
+    const paramRef = row.querySelector('.param-ref-input')?.value;
+    const paramLocation = row.querySelector('.param-location-select').value;
+    const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
+    const paramRequired = row.querySelector('.param-required-checkbox').checked;
+    const paramDefaultValue = row.querySelector('.param-default-input')?.value;
+    const paramDescription = row.querySelector('.param-desc-input')?.value;
+    
+    if (!paramName) return null;
+    
+    const param = {
+        name: paramName,
+        type: paramType,
+        location: paramLocation,
+        is_array: paramIsArray,
+        required: paramRequired
+    };
+    
+    if (paramType === 'custom' && paramRef) {
+        param.ref = parseInt(paramRef);
+    }
+    
+    // 只有在允许默认值的Tab中才保存默认值
+    if (allowDefaultValue && paramDefaultValue) {
+        param.default_value = paramDefaultValue;
+    }
+    
+    if (paramDescription) {
+        param.description = paramDescription;
+    }
+    
+    return param;
+}
 
 async function loadInterfaces() {
     const appId = document.getElementById('global-app-select').value;
@@ -933,8 +986,20 @@ function getMethodColor(method) {
     return colors[method] || 'secondary';
 }
 
-function addParamRow(paramData = null) {
-    const container = document.getElementById('params-container');
+function addParamRow(paramData = null, isDefaultParam = null) {
+    // 如果没有指定是否为默认参数，则根据当前Tab和参数数据判断
+    if (isDefaultParam === null) {
+        if (paramData && paramData.default_value !== undefined && paramData.default_value !== null && paramData.default_value !== '') {
+            isDefaultParam = true;
+        } else {
+            isDefaultParam = (currentParamsTab === 'default');
+        }
+    }
+    
+    const container = isDefaultParam ? 
+        document.getElementById('default-params-container') : 
+        document.getElementById('regular-params-container');
+    
     const row = document.createElement('div');
     row.className = 'param-row mb-2';
     
@@ -958,6 +1023,18 @@ function addParamRow(paramData = null) {
         
         return options;
     };
+    
+    // 只有默认参数才显示默认值输入框
+    const defaultValueHTML = isDefaultParam ? `
+        <div class="form-row" style="margin-top: 4px;">
+            <input type="text" class="param-default-input" placeholder="默认值（可选）" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1;">
+            <input type="text" class="param-desc-input" placeholder="参数描述（可选）" value="${paramData && paramData.description ? paramData.description : ''}" style="flex: 1;">
+        </div>
+    ` : `
+        <div class="form-row" style="margin-top: 4px;">
+            <input type="text" class="param-desc-input" placeholder="参数描述（可选）" value="${paramData && paramData.description ? paramData.description : ''}" style="flex: 1;">
+        </div>
+    `;
     
     row.innerHTML = `
         <div class="form-row">
@@ -984,10 +1061,7 @@ function addParamRow(paramData = null) {
                 <i class="fas fa-times"></i>
             </button>
         </div>
-        <div class="form-row" style="margin-top: 4px;">
-            <input type="text" class="param-default-input" placeholder="默认值（可选）" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1;">
-            <input type="text" class="param-desc-input" placeholder="参数描述（可选）" value="${paramData && paramData.description ? paramData.description : ''}" style="flex: 1;">
-        </div>
+        ${defaultValueHTML}
     `;
     container.appendChild(row);
 }

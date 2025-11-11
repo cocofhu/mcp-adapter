@@ -950,3 +950,68 @@ body {
 .gap-1 { gap: 8px; }
 .gap-2 { gap: 16px; }
 .gap-3 { gap: 24px; }
+
+/* ========== 参数Tab样式 ========== */
+.params-tabs {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+}
+
+.params-tab-header {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-primary);
+}
+
+.params-tab-btn {
+    flex: 1;
+    padding: 12px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: var(--transition);
+    position: relative;
+}
+
+.params-tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+}
+
+.params-tab-btn.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+    background: var(--bg-primary);
+}
+
+.params-tab-content {
+    padding: 16px;
+    min-height: 200px;
+}
+
+.params-tab-pane {
+    display: none;
+}
+
+.params-tab-pane.active {
+    display: block;
+}
+
+.params-tab-pane .empty-hint {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+}
+
+.params-tab-pane .empty-hint i {
+    font-size: 32px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+

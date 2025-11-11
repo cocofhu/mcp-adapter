@@ -266,7 +266,20 @@
                         </div>
                         <div class="form-group">
                             <label>参数定义</label>
-                            <div id="params-container"></div>
+                            <div class="params-tabs">
+                                <div class="params-tab-header">
+                                    <button type="button" class="params-tab-btn active" data-tab="default" onclick="switchParamsTab('default')">
+                                        默认参数
+                                    </button>
+                                    <button type="button" class="params-tab-btn" data-tab="regular" onclick="switchParamsTab('regular')">
+                                        普通参数
+                                    </button>
+                                </div>
+                                <div class="params-tab-content">
+                                    <div id="default-params-container" class="params-tab-pane active"></div>
+                                    <div id="regular-params-container" class="params-tab-pane" style="display: none;"></div>
+                                </div>
+                            </div>
                             <button type="button" class="btn btn-secondary mt-2" onclick="addParamRow()">
                                 <i class="fas fa-plus"></i> 添加参数
                             </button>
