@@ -307,7 +307,7 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 				log.Printf("Error calling tool %s, code: %d", ifaceCopy.Name, code)
 			}
 		if shouldStructuredOutput {
-			out, text, err := parseStructuredOutput(data)
+			out, text, err := parseStructuredOutput(data, outputSchemaCopy)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to parse structured output: %v", err)), nil
 			}
@@ -324,38 +324,62 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 	return fmt.Errorf("application %s not found for tool %s", app.Name, iface.Name)
 }
 
-// parseStructuredOutput 解析结构化输出，支持直接 JSON 对象和双重编码的 JSON 字符串
-func parseStructuredOutput(data []byte) (map[string]any, string, error) {
-	var out map[string]any
-	
-	// 尝试直接解析为 map[string]any
-	firstErr := json.Unmarshal(data, &out)
-	if firstErr == nil {
-		return out, string(data), nil
+// parseStructuredOutput 解析结构化输出，支持对象、数组和双重编码的 JSON 字符串
+func parseStructuredOutput(data []byte, outputSchema map[string]any) (map[string]any, string, error) {
+	// 首先尝试解析为通用类型
+	var genericData any
+	if err := json.Unmarshal(data, &genericData); err != nil {
+		return nil, "", fmt.Errorf("invalid JSON: %v", err)
 	}
 	
-	// 尝试先解析为字符串（处理双重编码）
-	var strData string
-	secondErr := json.Unmarshal(data, &strData)
-	if secondErr != nil {
-		// 两种方式都失败，返回详细的错误信息
-		dataPreview := string(data)
-		if len(dataPreview) > 200 {
-			dataPreview = dataPreview[:200] + "..."
+	// 检查解析结果的类型
+	switch v := genericData.(type) {
+	case map[string]any:
+		// 直接是对象，返回
+		return v, string(data), nil
+		
+	case []any:
+		// 是数组，需要包装成对象
+		// 检查 schema 的顶层 type，如果是 array，则包装；否则报错
+		schemaType, _ := outputSchema["type"].(string)
+		if schemaType == "array" {
+			// schema 定义的就是数组类型，包装为 { "items": [...] }
+			wrapped := map[string]any{"items": v}
+			return wrapped, string(data), nil
 		}
-		return nil, "", fmt.Errorf("invalid JSON format, first error: %v, second error: %v, data: %s", firstErr, secondErr, dataPreview)
-	}
-	
-	// 再次解析字符串内容
-	if err := json.Unmarshal([]byte(strData), &out); err != nil {
-		strPreview := strData
-		if len(strPreview) > 200 {
-			strPreview = strPreview[:200] + "..."
+		// 如果 schema 不是 array，尝试查找第一个是 array 类型的属性
+		if properties, ok := outputSchema["properties"].(map[string]any); ok {
+			for key, propSchema := range properties {
+				if propSchemaMap, ok := propSchema.(map[string]any); ok {
+					if propType, _ := propSchemaMap["type"].(string); propType == "array" {
+						// 找到了数组类型的属性，使用该属性名包装
+						wrapped := map[string]any{key: v}
+						return wrapped, string(data), nil
+					}
+				}
+			}
 		}
-		return nil, "", fmt.Errorf("failed to parse inner JSON string: %v, data: %s", err, strPreview)
+		// 都不是，使用默认的 "items" 包装
+		wrapped := map[string]any{"items": v}
+		return wrapped, string(data), nil
+		
+	case string:
+		// 可能是双重编码的 JSON 字符串
+		var out map[string]any
+		if err := json.Unmarshal([]byte(v), &out); err != nil {
+			// 尝试解析为数组
+			var arrData []any
+			if err2 := json.Unmarshal([]byte(v), &arrData); err2 == nil {
+				wrapped := map[string]any{"items": arrData}
+				return wrapped, v, nil
+			}
+			return nil, "", fmt.Errorf("failed to parse inner JSON string: %v", err)
+		}
+		return out, v, nil
+		
+	default:
+		return nil, "", fmt.Errorf("unsupported JSON type: %T", genericData)
 	}
-	
-	return out, strData, nil
 }
 
 // filterOutputBySchema 根据 outputSchema 过滤输出，只保留 schema 中定义的字段（递归处理）
