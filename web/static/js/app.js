@@ -611,6 +611,29 @@ function handleTypeChange(selectElement) {
     }
 }
 
+// 处理参数类型变化（包括默认值输入框的显示/隐藏）
+function handleParamTypeChange(selectElement) {
+    // 首先处理引用值的更新
+    handleTypeChange(selectElement);
+    
+    const row = selectElement.closest('.param-row');
+    const defaultInput = row.querySelector('.param-default-input');
+    
+    // 如果存在默认值输入框（即在默认参数Tab中）
+    if (defaultInput) {
+        const selectedOption = selectElement.options[selectElement.selectedIndex];
+        const isBasicType = ['string', 'number', 'boolean'].includes(selectedOption.value);
+        
+        // 根据类型显示/隐藏默认值输入框
+        if (isBasicType) {
+            defaultInput.style.display = '';
+        } else {
+            defaultInput.style.display = 'none';
+            defaultInput.value = ''; // 清空默认值
+        }
+    }
+}
+
 function viewCustomType(id) {
     const type = state.customTypes.find(t => t.id === id);
     if (!type) return;
@@ -868,8 +891,9 @@ function collectParamFromRow(row, allowDefaultValue) {
         param.ref = parseInt(paramRef);
     }
     
-    // 只有在允许默认值的Tab中才保存默认值
-    if (allowDefaultValue && paramDefaultValue) {
+    // 只有在允许默认值的Tab中，且参数类型为基本类型时，才保存默认值
+    const isBasicType = ['string', 'number', 'boolean'].includes(paramType);
+    if (allowDefaultValue && isBasicType && paramDefaultValue) {
         param.default_value = paramDefaultValue;
     }
     
@@ -1024,14 +1048,18 @@ function addParamRow(paramData = null, isDefaultParam = null) {
         return options;
     };
     
-    // 只有默认参数才显示默认值输入框
+    // 判断当前参数类型是否为基本类型
+    const currentType = paramData ? paramData.type : 'string';
+    const isBasicType = ['string', 'number', 'boolean'].includes(currentType);
+    
+    // 只有默认参数且类型为基本类型时才显示默认值输入框
     const defaultValueHTML = isDefaultParam ? `
-        <div class="form-row" style="margin-top: 4px;">
-            <input type="text" class="param-default-input" placeholder="默认值（可选）" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1;">
+        <div class="form-row param-extra-row" style="margin-top: 4px;">
+            <input type="text" class="param-default-input" placeholder="默认值（可选）" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1; ${isBasicType ? '' : 'display: none;'}">
             <input type="text" class="param-desc-input" placeholder="参数描述（可选）" value="${paramData && paramData.description ? paramData.description : ''}" style="flex: 1;">
         </div>
     ` : `
-        <div class="form-row" style="margin-top: 4px;">
+        <div class="form-row param-extra-row" style="margin-top: 4px;">
             <input type="text" class="param-desc-input" placeholder="参数描述（可选）" value="${paramData && paramData.description ? paramData.description : ''}" style="flex: 1;">
         </div>
     `;
@@ -1039,7 +1067,7 @@ function addParamRow(paramData = null, isDefaultParam = null) {
     row.innerHTML = `
         <div class="form-row">
             <input type="text" class="param-name-input" placeholder="参数名" value="${paramData ? paramData.name : ''}">
-            <select class="param-type-select" onchange="handleTypeChange(this)">
+            <select class="param-type-select" onchange="handleParamTypeChange(this)">
                 ${buildTypeOptions()}
             </select>
             <input type="hidden" class="param-ref-input" value="${paramData && paramData.ref ? paramData.ref : ''}">
