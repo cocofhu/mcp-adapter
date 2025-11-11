@@ -12,6 +12,33 @@ const state = {
 
 // ========== 工具函数 ==========
 
+// HTML 转义函数，防止 XSS
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 日期格式化函数
+function formatDate(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return '今天';
+    if (diffDays === 1) return '昨天';
+    if (diffDays < 7) return `${diffDays}天前`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}周前`;
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // 显示 Toast 通知
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
@@ -160,42 +187,52 @@ function renderApplications(apps) {
         return;
     }
     
-    grid.innerHTML = filteredApps.map(app => `
+    grid.innerHTML = filteredApps.map(app => {
+        // 处理描述文本，限制长度
+        const description = app.description || '暂无描述';
+        const displayDesc = description.length > 120 ? description.substring(0, 120) + '...' : description;
+        
+        return `
         <div class="card" onclick="viewApplication(${app.id})">
             <div class="card-header">
-                <div>
-                    <div class="card-title">${app.name}</div>
-                    <div class="card-subtitle">${app.path || '/'}</div>
+                <div style="flex: 1; min-width: 0;">
+                    <div class="card-title" title="${escapeHtml(app.name)}">${escapeHtml(app.name)}</div>
+                    <div class="card-subtitle">路径: /${app.path || ''}</div>
                 </div>
                 <span class="card-badge badge-${app.enabled ? 'success' : 'warning'}">
                     ${app.enabled ? '已启用' : '已禁用'}
                 </span>
             </div>
             <div class="card-body">
-                <p class="card-subtitle">${app.description || '暂无描述'}</p>
+                <div class="card-subtitle" title="${escapeHtml(description)}">${escapeHtml(displayDesc)}</div>
                 <div class="card-meta">
                     <div class="card-meta-item">
                         <i class="fas fa-network-wired"></i>
-                        ${app.protocol || 'http'}
+                        ${app.protocol?.toUpperCase() || 'HTTP'}
+                    </div>
+                    <div class="card-meta-item">
+                        <i class="fas fa-calendar"></i>
+                        ${formatDate(app.created_at)}
                     </div>
                 </div>
             </div>
             <div class="card-footer">
-                <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); viewApplicationEndpoint(${app.id})">
-                    <i class="fas fa-link"></i> 接入链接
+                <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); viewApplicationEndpoint(${app.id})" title="查看 MCP 接入链接">
+                    <i class="fas fa-link"></i> 接入
                 </button>
-                <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); manageApplicationInterfaces(${app.id})">
-                    <i class="fas fa-plug"></i> 接口管理
+                <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); manageApplicationInterfaces(${app.id})" title="管理此应用的接口">
+                    <i class="fas fa-plug"></i> 接口
                 </button>
-                <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); editApplication(${app.id})">
+                <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); editApplication(${app.id})" title="编辑应用信息">
                     <i class="fas fa-edit"></i> 编辑
                 </button>
-                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteApplication(${app.id})">
+                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteApplication(${app.id})" title="删除此应用">
                     <i class="fas fa-trash"></i> 删除
                 </button>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // 应用搜索事件监听
@@ -789,7 +826,7 @@ async function deleteCustomType(id) {
 
 // 接口表单状态
 let currentInterfaceId = null;
-let currentParamsTab = 'default'; // 当前激活的参数Tab
+let currentParamsTab = 'input'; // 当前激活的参数Tab
 
 // 切换参数Tab
 function switchParamsTab(tab) {
@@ -804,18 +841,30 @@ function switchParamsTab(tab) {
         }
     });
     
-    // 更新Tab内容显示
-    if (tab === 'default') {
-        document.getElementById('default-params-container').style.display = 'block';
-        document.getElementById('default-params-container').classList.add('active');
-        document.getElementById('regular-params-container').style.display = 'none';
-        document.getElementById('regular-params-container').classList.remove('active');
-    } else {
-        document.getElementById('default-params-container').style.display = 'none';
-        document.getElementById('default-params-container').classList.remove('active');
-        document.getElementById('regular-params-container').style.display = 'block';
-        document.getElementById('regular-params-container').classList.add('active');
+    // 更新Tab描述显示
+    document.querySelectorAll('.tab-desc').forEach(desc => {
+        desc.style.display = 'none';
+    });
+    const descId = `${tab}-tab-desc`;
+    const descElem = document.getElementById(descId);
+    if (descElem) {
+        descElem.style.display = 'block';
     }
+    
+    // 更新Tab内容显示
+    const containers = ['input-params-container', 'output-params-container', 'fixed-params-container'];
+    containers.forEach(containerId => {
+        const container = document.getElementById(containerId);
+        if (container) {
+            if (containerId === `${tab}-params-container`) {
+                container.style.display = 'block';
+                container.classList.add('active');
+            } else {
+                container.style.display = 'none';
+                container.classList.remove('active');
+            }
+        }
+    });
 }
 
 // 显示接口表单
@@ -837,16 +886,17 @@ async function showInterfaceForm(interfaceId = null) {
     }
     
     currentInterfaceId = interfaceId;
-    currentParamsTab = 'default'; // 重置为默认Tab
+    currentParamsTab = 'input'; // 重置为 input Tab
     document.getElementById('interface-list-view').style.display = 'none';
     document.getElementById('interface-form-view').style.display = 'block';
     
     // 清空参数容器
-    document.getElementById('default-params-container').innerHTML = '';
-    document.getElementById('regular-params-container').innerHTML = '';
+    document.getElementById('input-params-container').innerHTML = '';
+    document.getElementById('output-params-container').innerHTML = '';
+    document.getElementById('fixed-params-container').innerHTML = '';
     
     // 重置Tab状态
-    switchParamsTab('default');
+    switchParamsTab('input');
     
     if (interfaceId) {
         // 编辑模式
@@ -861,15 +911,10 @@ async function showInterfaceForm(interfaceId = null) {
             document.getElementById('interface-url').value = iface.url;
             document.getElementById('interface-auth').value = iface.auth_type;
             
-            // 加载参数，根据是否有默认值分配到不同Tab
+            // 加载参数，根据 group 分配到不同Tab
             if (iface.parameters && iface.parameters.length > 0) {
                 iface.parameters.forEach(param => {
-                    // 如果参数有默认值，添加到默认参数Tab，否则添加到普通参数Tab
-                    if (param.default_value !== undefined && param.default_value !== null && param.default_value !== '') {
-                        addParamRow(param, true);
-                    } else {
-                        addParamRow(param, false);
-                    }
+                    addParamRow(param);
                 });
             }
         }
@@ -919,17 +964,31 @@ document.getElementById('interface-form-submit').addEventListener('click', async
     
     const parameters = [];
     
-    // 收集默认参数（可以有默认值）
-    document.querySelectorAll('#default-params-container .param-row').forEach(row => {
-        const param = collectParamFromRow(row, true);
-        if (param) parameters.push(param);
+    // 收集所有三个 Tab 的参数
+    let validationError = null;
+    ['input', 'output', 'fixed'].forEach(tabName => {
+        const containerId = `${tabName}-params-container`;
+        document.querySelectorAll(`#${containerId} .param-row`).forEach(row => {
+            const param = collectParamFromRow(row);
+            if (param) {
+                // 验证 fixed 参数必须有默认值且不能是数组
+                if (param.group === 'fixed') {
+                    if (!param.default_value || param.default_value.trim() === '') {
+                        validationError = `Fixed 参数 "${param.name}" 必须设置默认值`;
+                    }
+                    if (param.is_array) {
+                        validationError = `Fixed 参数 "${param.name}" 不能是数组类型`;
+                    }
+                }
+                parameters.push(param);
+            }
+        });
     });
     
-    // 收集普通参数（不应有默认值）
-    document.querySelectorAll('#regular-params-container .param-row').forEach(row => {
-        const param = collectParamFromRow(row, false);
-        if (param) parameters.push(param);
-    });
+    if (validationError) {
+        showToast(validationError, 'error');
+        return;
+    }
     
     try {
         if (currentInterfaceId) {
@@ -973,11 +1032,12 @@ document.getElementById('interface-form-submit').addEventListener('click', async
 });
 
 // 从参数行收集数据的辅助函数
-function collectParamFromRow(row, allowDefaultValue) {
+function collectParamFromRow(row) {
     const paramName = row.querySelector('.param-name-input').value;
     const paramType = row.querySelector('.param-type-select').value;
     const paramRef = row.querySelector('.param-ref-input')?.value;
     const paramLocation = row.querySelector('.param-location-select').value;
+    const paramGroup = row.querySelector('.param-group-input')?.value || 'input';
     const paramIsArray = row.querySelector('.param-array-checkbox')?.checked || false;
     const paramRequired = row.querySelector('.param-required-checkbox').checked;
     const paramDefaultValue = row.querySelector('.param-default-input')?.value;
@@ -989,6 +1049,7 @@ function collectParamFromRow(row, allowDefaultValue) {
         name: paramName,
         type: paramType,
         location: paramLocation,
+        group: paramGroup,
         is_array: paramIsArray,
         required: paramRequired
     };
@@ -997,10 +1058,12 @@ function collectParamFromRow(row, allowDefaultValue) {
         param.ref = parseInt(paramRef);
     }
     
-    // 只有在允许默认值的Tab中，且参数类型为基本类型时，才保存默认值
-    const isBasicType = ['string', 'number', 'boolean'].includes(paramType);
-    if (allowDefaultValue && isBasicType && paramDefaultValue) {
-        param.default_value = paramDefaultValue;
+    // 保存默认值
+    // Fixed 参数必须有默认值
+    // Input 参数不再支持默认值（已移除该功能）
+    // Output 参数不能有默认值
+    if (paramGroup === 'fixed') {
+        param.default_value = paramDefaultValue || '';
     }
     
     if (paramDescription) {
@@ -1116,19 +1179,18 @@ function getMethodColor(method) {
     return colors[method] || 'secondary';
 }
 
-function addParamRow(paramData = null, isDefaultParam = null) {
-    // 如果没有指定是否为默认参数，则根据当前Tab和参数数据判断
-    if (isDefaultParam === null) {
-        if (paramData && paramData.default_value !== undefined && paramData.default_value !== null && paramData.default_value !== '') {
-            isDefaultParam = true;
-        } else {
-            isDefaultParam = (currentParamsTab === 'default');
-        }
-    }
+function addParamRow(paramData = null) {
+    // 确定参数组类型：从参数数据获取，或使用当前激活的 Tab
+    const group = paramData && paramData.group ? paramData.group : currentParamsTab;
     
-    const container = isDefaultParam ? 
-        document.getElementById('default-params-container') : 
-        document.getElementById('regular-params-container');
+    // 根据 group 选择对应的容器
+    const containerId = `${group}-params-container`;
+    const container = document.getElementById(containerId);
+    
+    if (!container) {
+        console.error(`Container not found for group: ${group}`);
+        return;
+    }
     
     const row = document.createElement('div');
     row.className = 'param-row mb-2';
@@ -1158,10 +1220,15 @@ function addParamRow(paramData = null, isDefaultParam = null) {
     const currentType = paramData ? paramData.type : 'string';
     const isBasicType = ['string', 'number', 'boolean'].includes(currentType);
     
-    // 只有默认参数且类型为基本类型时才显示默认值输入框
-    const defaultValueHTML = isDefaultParam ? `
+    // Fixed 参数需要显示默认值输入框（必填）
+    // Input 参数不显示默认值（已移除该功能）
+    // Output 参数不需要默认值
+    const showDefaultValue = (group === 'fixed');
+    const defaultValueRequired = (group === 'fixed') ? '（必填）' : '';
+    
+    const defaultValueHTML = showDefaultValue ? `
         <div class="form-row param-extra-row" style="margin-top: 4px;">
-            <input type="text" class="param-default-input" placeholder="默认值（可选）" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1; ${isBasicType ? '' : 'display: none;'}">
+            <input type="text" class="param-default-input" placeholder="默认值${defaultValueRequired}" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1;" required>
             <input type="text" class="param-desc-input" placeholder="参数描述（可选）" value="${paramData && paramData.description ? paramData.description : ''}" style="flex: 1;">
         </div>
     ` : `
@@ -1177,6 +1244,7 @@ function addParamRow(paramData = null, isDefaultParam = null) {
                 ${buildTypeOptions()}
             </select>
             <input type="hidden" class="param-ref-input" value="${paramData && paramData.ref ? paramData.ref : ''}">
+            <input type="hidden" class="param-group-input" value="${group}">
             <select class="param-location-select">
                 <option value="query" ${paramData && paramData.location === 'query' ? 'selected' : ''}>query</option>
                 <option value="header" ${paramData && paramData.location === 'header' ? 'selected' : ''}>header</option>
@@ -1184,11 +1252,11 @@ function addParamRow(paramData = null, isDefaultParam = null) {
                 <option value="path" ${paramData && paramData.location === 'path' ? 'selected' : ''}>path</option>
             </select>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="param-array-checkbox" ${paramData && paramData.is_array ? 'checked' : ''} onchange="handleParamArrayChange(this)">
+                <input type="checkbox" class="param-array-checkbox" ${paramData && paramData.is_array ? 'checked' : ''} ${group === 'fixed' ? 'disabled' : ''} onchange="handleParamArrayChange(this)">
                 数组
             </label>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="param-required-checkbox" ${paramData && paramData.required ? 'checked' : ''} ${isDefaultParam && paramData && paramData.is_array ? 'disabled' : ''}>
+                <input type="checkbox" class="param-required-checkbox" ${paramData && paramData.required ? 'checked' : ''} ${group === 'fixed' ? 'checked disabled' : ''}>
                 必填
             </label>
             <button type="button" class="btn-remove" onclick="this.parentElement.parentElement.remove()" title="删除">
@@ -1197,12 +1265,22 @@ function addParamRow(paramData = null, isDefaultParam = null) {
         </div>
         ${defaultValueHTML}
     `;
-    container.appendChild(row);
     
-    // 初始化必填复选框状态
-    if (isDefaultParam) {
-        updateRequiredCheckboxState(row);
+    // Fixed 参数特殊处理：必填且不可修改，数组选项禁用
+    if (group === 'fixed') {
+        const requiredCheckbox = row.querySelector('.param-required-checkbox');
+        if (requiredCheckbox) {
+            requiredCheckbox.checked = true;
+            requiredCheckbox.disabled = true;
+        }
+        
+        const arrayCheckbox = row.querySelector('.param-array-checkbox');
+        if (arrayCheckbox) {
+            arrayCheckbox.checked = false;
+            arrayCheckbox.disabled = true;
+        }
     }
+    container.appendChild(row);
 }
 
 function viewInterface(id) {
@@ -1237,6 +1315,7 @@ function viewInterface(id) {
                                 <div class="field-meta">
                                     <span>${getParamTypeDisplay(param)}${param.is_array ? '[]' : ''}</span>
                                     <span>${param.location}</span>
+                                    <span class="badge-${param.group === 'input' ? 'primary' : param.group === 'output' ? 'success' : 'warning'}">${param.group || 'input'}</span>
                                     ${param.required ? '<span class="badge-danger">必填</span>' : ''}
                                     ${param.default_value ? `<span>默认值: ${param.default_value}</span>` : ''}
                                 </div>

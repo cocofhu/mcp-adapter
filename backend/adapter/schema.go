@@ -72,14 +72,22 @@ func buildMcpSchemaByType(customTypeId int64) (map[string]any, error) {
 }
 
 func BuildMcpInputSchemaByInterface(id int64) (map[string]any, error) {
+	return buildMcpSchemaByInterface(id, "input")
+}
+
+func BuildMcpOutputSchemaByInterface(id int64) (map[string]any, error) {
+	return buildMcpSchemaByInterface(id, "output")
+}
+
+func buildMcpSchemaByInterface(id int64, group string) (map[string]any, error) {
 	db := database.GetDB()
 	var iface models.Interface
 	if err := db.First(&iface, id).Error; err != nil {
 		return nil, errors.New("interface not found")
 	}
-	// 获取参数列表
+	// 获取参数列表，只包含 input 组的参数
 	var params []models.InterfaceParameter
-	if err := db.Where("interface_id = ?", iface.ID).Find(&params).Error; err != nil {
+	if err := db.Where("interface_id = ? AND `group` = ?", iface.ID, group).Find(&params).Error; err != nil {
 		return nil, errors.New("failed to fetch interface parameters")
 	}
 	schema := make(map[string]any)
@@ -87,6 +95,8 @@ func BuildMcpInputSchemaByInterface(id int64) (map[string]any, error) {
 	required := make([]string, 0)
 	properties := make(map[string]any)
 	for _, field := range params {
+		// 有默认值的非数组基础类型参数不需要用户输入，跳过
+		// 这里和fix同一个逻辑 后面可以去掉 这个版本先不去掉
 		if field.DefaultValue != nil &&
 			*field.DefaultValue != "" &&
 			!field.IsArray && field.Type != "custom" {

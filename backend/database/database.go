@@ -39,6 +39,16 @@ func InitDatabase(dbPath string) {
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
+
+	// 数据迁移：为现有的 InterfaceParameter 设置默认 Group 值
+	// 将所有 Group 为空的参数设置为 "input"
+	err = db.Exec("UPDATE interface_parameters SET `group` = 'input' WHERE `group` IS NULL OR `group` = ''").Error
+	if err != nil {
+		log.Printf("Warning: Failed to update existing parameters' group field: %v", err)
+	} else {
+		log.Println("Updated existing parameters with default group value")
+	}
+
 	DB = db
 	log.Println("Database connected and migrated successfully")
 }

@@ -260,24 +260,40 @@
                             <label>认证类型</label>
                             <select id="interface-auth">
                                 <option value="none">无认证</option>
-                                <option value="bearer">Bearer Token</option>
-                                <option value="basic">Basic Auth</option>
                             </select>
                         </div>
                         <div class="form-group">
                             <label>参数定义</label>
                             <div class="params-tabs">
                                 <div class="params-tab-header">
-                                    <button type="button" class="params-tab-btn active" data-tab="default" onclick="switchParamsTab('default')">
-                                        默认参数
+                                    <button type="button" class="params-tab-btn active" data-tab="input" onclick="switchParamsTab('input')">
+                                        <i class="fas fa-sign-in-alt"></i> Input 参数
                                     </button>
-                                    <button type="button" class="params-tab-btn" data-tab="regular" onclick="switchParamsTab('regular')">
-                                        普通参数
+                                    <button type="button" class="params-tab-btn" data-tab="output" onclick="switchParamsTab('output')">
+                                        <i class="fas fa-sign-out-alt"></i> Output 参数
+                                    </button>
+                                    <button type="button" class="params-tab-btn" data-tab="fixed" onclick="switchParamsTab('fixed')">
+                                        <i class="fas fa-lock"></i> Fixed 参数
                                     </button>
                                 </div>
                                 <div class="params-tab-content">
-                                    <div id="default-params-container" class="params-tab-pane active"></div>
-                                    <div id="regular-params-container" class="params-tab-pane" style="display: none;"></div>
+                                    <div class="params-tab-description">
+                                        <p id="input-tab-desc" class="tab-desc active">
+                                            <i class="fas fa-info-circle"></i>
+                                            <strong>Input 参数：</strong>用户在调用接口时需要提供的参数，会显示在 MCP Schema 中
+                                        </p>
+                                        <p id="output-tab-desc" class="tab-desc" style="display: none;">
+                                            <i class="fas fa-info-circle"></i>
+                                            <strong>Output 参数：</strong>从接口响应中提取的字段（暂未实现，用于文档标记）
+                                        </p>
+                                        <p id="fixed-tab-desc" class="tab-desc" style="display: none;">
+                                            <i class="fas fa-info-circle"></i>
+                                            <strong>Fixed 参数：</strong>使用默认值的固定参数，不允许用户修改，不显示在 MCP Schema 中
+                                        </p>
+                                    </div>
+                                    <div id="input-params-container" class="params-tab-pane active"></div>
+                                    <div id="output-params-container" class="params-tab-pane" style="display: none;"></div>
+                                    <div id="fixed-params-container" class="params-tab-pane" style="display: none;"></div>
                                 </div>
                             </div>
                             <button type="button" class="btn btn-secondary mt-2" onclick="addParamRow()">
@@ -458,6 +474,7 @@
       "type": "string (必填, 可选值: number, string, boolean, custom)",
       "ref": "number (当type=custom时必填)",
       "location": "string (必填, 可选值: query, header, body, path)",
+      "group": "string (必填, 可选值: input, output, fixed)",
       "is_array": "boolean (可选, 默认false)",
       "required": "boolean (可选, 默认false)",
       "description": "string (可选, 最大16384字符)",
@@ -480,8 +497,18 @@
       "name": "id",
       "type": "string",
       "location": "query",
+      "group": "input",
       "required": true,
       "description": "用户ID"
+    },
+    {
+      "name": "apiKey",
+      "type": "string",
+      "location": "header",
+      "group": "fixed",
+      "required": true,
+      "default_value": "your-api-key",
+      "description": "API密钥（固定参数）"
     }
   ]
 }</code></pre>
@@ -530,6 +557,13 @@
                             <li><strong>header</strong> - HTTP 请求头</li>
                             <li><strong>body</strong> - 请求体（JSON）</li>
                             <li><strong>path</strong> - URL 路径参数 (/users/{id})</li>
+                        </ul>
+
+                        <h3>参数组 (group)</h3>
+                        <ul>
+                            <li><strong>input</strong> - 输入参数：用户在调用接口时提供，会显示在 MCP Schema 中</li>
+                            <li><strong>output</strong> - 输出参数：从接口响应中提取（未来功能，暂未实现）</li>
+                            <li><strong>fixed</strong> - 固定参数：使用默认值，不允许用户修改，不显示在 MCP Schema 中</li>
                         </ul>
 
                         <h3>HTTP 方法</h3>

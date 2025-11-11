@@ -7,13 +7,15 @@ import (
 
 // InterfaceParam 接口参数定义
 type InterfaceParam struct {
-	Name        string
-	Type        string
-	Location    string
-	IsArray     bool
-	Required    bool
-	Description string
-	Ref         *int64 // 引用自定义类型ID
+	Name         string
+	Type         string
+	Location     string
+	IsArray      bool
+	Required     bool
+	Description  string
+	DefaultValue *string // 默认值
+	Group        string  // 参数组: input-输入参数, output-输出参数, fixed-固定参数
+	Ref          *int64  // 引用自定义类型ID
 }
 
 // InterfaceDefinition 接口定义
@@ -83,6 +85,7 @@ func InitDefaultData() {
 				{Name: "required", Type: "boolean", Required: false, Description: "是否必填"},
 				{Name: "description", Type: "string", Required: false, Description: "参数描述"},
 				{Name: "default_value", Type: "string", Required: false, Description: "默认值"},
+				{Name: "group", Type: "string", Required: true, Description: "参数组: input-输入参数(用户调用时提供), output-输出参数(从响应提取), fixed-固定参数(使用默认值,不可修改)"},
 			},
 		},
 		{
@@ -95,6 +98,61 @@ func InitDefaultData() {
 				{Name: "is_array", Type: "boolean", Required: false, Description: "是否为数组类型"},
 				{Name: "required", Type: "boolean", Required: false, Description: "是否必填"},
 				{Name: "description", Type: "string", Required: false, Description: "字段描述"},
+			},
+		},
+		// 响应类型定义
+		{
+			Name:        "ApplicationResponse",
+			Description: "应用响应数据",
+			Fields: []CustomTypeFieldDef{
+				{Name: "id", Type: "number", Required: true, Description: "应用ID"},
+				{Name: "name", Type: "string", Required: true, Description: "应用名称"},
+				{Name: "description", Type: "string", Required: false, Description: "应用描述"},
+				{Name: "path", Type: "string", Required: true, Description: "应用路径"},
+				{Name: "protocol", Type: "string", Required: true, Description: "应用协议"},
+				{Name: "post_process", Type: "string", Required: false, Description: "后处理脚本"},
+				{Name: "environment", Type: "string", Required: false, Description: "环境变量"},
+				{Name: "enabled", Type: "boolean", Required: true, Description: "是否启用"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间"},
+			},
+		},
+		{
+			Name:        "InterfaceResponse",
+			Description: "接口响应数据",
+			Fields: []CustomTypeFieldDef{
+				{Name: "id", Type: "number", Required: true, Description: "接口ID"},
+				{Name: "app_id", Type: "number", Required: true, Description: "所属应用ID"},
+				{Name: "name", Type: "string", Required: true, Description: "接口名称"},
+				{Name: "description", Type: "string", Required: false, Description: "接口描述"},
+				{Name: "protocol", Type: "string", Required: true, Description: "协议类型"},
+				{Name: "url", Type: "string", Required: true, Description: "接口URL"},
+				{Name: "method", Type: "string", Required: true, Description: "HTTP方法"},
+				{Name: "auth_type", Type: "string", Required: true, Description: "鉴权类型"},
+				{Name: "enabled", Type: "boolean", Required: true, Description: "是否启用"},
+				{Name: "post_process", Type: "string", Required: false, Description: "后处理脚本"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间"},
+			},
+		},
+		{
+			Name:        "CustomTypeResponse",
+			Description: "自定义类型响应数据（包含字段列表）",
+			Fields:      []CustomTypeFieldDef{
+				{Name: "id", Type: "number", Required: true, Description: "类型ID"},
+				{Name: "app_id", Type: "number", Required: true, Description: "所属应用ID"},
+				{Name: "name", Type: "string", Required: true, Description: "类型名称"},
+				{Name: "description", Type: "string", Required: false, Description: "类型描述"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间"},
+			},
+		},
+		{
+			Name:        "OperationResult",
+			Description: "操作结果",
+			Fields: []CustomTypeFieldDef{
+				{Name: "success", Type: "boolean", Required: true, Description: "操作是否成功"},
+				{Name: "message", Type: "string", Required: false, Description: "结果消息"},
 			},
 		},
 	}
@@ -139,6 +197,26 @@ func InitDefaultData() {
 	// 获取自定义类型ID的指针（用于参数引用）
 	interfaceParamTypeID := customTypeIDs["InterfaceParameter"]
 	customTypeFieldTypeID := customTypeIDs["CustomTypeField"]
+	applicationResponseTypeID := customTypeIDs["ApplicationResponse"]
+	interfaceResponseTypeID := customTypeIDs["InterfaceResponse"]
+	customTypeResponseTypeID := customTypeIDs["CustomTypeResponse"]
+	operationResultTypeID := customTypeIDs["OperationResult"]
+
+	// 为 CustomTypeResponse 添加 fields 字段（引用 CustomTypeField）
+	fieldsField := models.CustomTypeField{
+		CustomTypeID: customTypeResponseTypeID,
+		Name:         "fields",
+		Type:         "custom",
+		Ref:          &customTypeFieldTypeID,
+		IsArray:      true,
+		Required:     false,
+		Description:  "字段列表",
+	}
+	if err := db.Create(&fieldsField).Error; err != nil {
+		log.Printf("Failed to add fields field to CustomTypeResponse: %v", err)
+	} else {
+		log.Printf("Added fields field to CustomTypeResponse")
+	}
 
 	// 定义系统接口列表及其参数
 	interfaces := []InterfaceDefinition{
@@ -149,13 +227,14 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/applications",
 			Method:      "POST",
 			Parameters: []InterfaceParam{
-				{Name: "name", Type: "string", Location: "body", Required: true, Description: "应用名称，必须唯一"},
-				{Name: "description", Type: "string", Location: "body", Required: false, Description: "应用描述，用于说明应用的用途"},
-				{Name: "path", Type: "string", Location: "body", Required: true, Description: "应用路径标识，必须唯一，用于构建访问URL"},
-				{Name: "protocol", Type: "string", Location: "body", Required: true, Description: "应用对外协议，支持'sse'和'streamable'"},
-				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本，用于处理接口返回结果"},
-				{Name: "environment", Type: "string", Location: "body", Required: false, Description: "环境变量，JSON字符串格式"},
-				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用应用，默认为true"},
+				{Name: "name", Type: "string", Location: "body", Required: true, Description: "应用名称，必须唯一", Group: "input"},
+				{Name: "description", Type: "string", Location: "body", Required: false, Description: "应用描述，用于说明应用的用途", Group: "input"},
+				{Name: "path", Type: "string", Location: "body", Required: true, Description: "应用路径标识，必须唯一，用于构建访问URL", Group: "input"},
+				{Name: "protocol", Type: "string", Location: "body", Required: true, Description: "应用对外协议，支持'sse'和'streamable'", Group: "input"},
+				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本，用于处理接口返回结果", Group: "input"},
+				{Name: "environment", Type: "string", Location: "body", Required: false, Description: "环境变量，JSON字符串格式", Group: "input"},
+				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用应用，默认为true", Group: "input"},
+				{Name: "application", Type: "custom", Location: "body", Required: false, Description: "创建成功后返回的应用完整信息", Group: "output", Ref: &applicationResponseTypeID},
 			},
 		},
 		{
@@ -163,7 +242,9 @@ func InitDefaultData() {
 			Description: "获取所有应用列表。返回系统中所有已创建的应用，包括已启用和未启用的应用。",
 			URL:         "http://localhost:8080/api/applications",
 			Method:      "GET",
-			Parameters:  []InterfaceParam{},
+			Parameters: []InterfaceParam{
+				{Name: "applications", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "应用列表数组", Group: "output", Ref: &applicationResponseTypeID},
+			},
 		},
 		{
 			Name:        "GetApplication",
@@ -171,7 +252,8 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/applications/{id}",
 			Method:      "GET",
 			Parameters: []InterfaceParam{
-				{Name: "id", Type: "number", Location: "path", Required: true, Description: "应用ID"},
+				{Name: "id", Type: "number", Location: "path", Required: true, Description: "应用ID", Group: "input"},
+				{Name: "application", Type: "custom", Location: "body", Required: false, Description: "应用完整信息", Group: "output", Ref: &applicationResponseTypeID},
 			},
 		},
 		{
@@ -180,14 +262,15 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/applications/{id}",
 			Method:      "PUT",
 			Parameters: []InterfaceParam{
-				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要更新的应用ID"},
-				{Name: "name", Type: "string", Location: "body", Required: false, Description: "应用名称，必须唯一"},
-				{Name: "description", Type: "string", Location: "body", Required: false, Description: "应用描述"},
-				{Name: "path", Type: "string", Location: "body", Required: false, Description: "应用路径标识，必须唯一"},
-				{Name: "protocol", Type: "string", Location: "body", Required: false, Description: "应用协议，支持'sse'和'streamable'"},
-				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本"},
-				{Name: "environment", Type: "string", Location: "body", Required: false, Description: "环境变量，JSON字符串格式"},
-				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用应用"},
+				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要更新的应用ID", Group: "input"},
+				{Name: "name", Type: "string", Location: "body", Required: false, Description: "应用名称，必须唯一", Group: "input"},
+				{Name: "description", Type: "string", Location: "body", Required: false, Description: "应用描述", Group: "input"},
+				{Name: "path", Type: "string", Location: "body", Required: false, Description: "应用路径标识，必须唯一", Group: "input"},
+				{Name: "protocol", Type: "string", Location: "body", Required: false, Description: "应用协议，支持'sse'和'streamable'", Group: "input"},
+				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本", Group: "input"},
+				{Name: "environment", Type: "string", Location: "body", Required: false, Description: "环境变量，JSON字符串格式", Group: "input"},
+				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用应用", Group: "input"},
+				{Name: "application", Type: "custom", Location: "body", Required: false, Description: "更新后的应用完整信息", Group: "output", Ref: &applicationResponseTypeID},
 			},
 		},
 		{
@@ -196,7 +279,8 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/applications/{id}",
 			Method:      "DELETE",
 			Parameters: []InterfaceParam{
-				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要删除的应用ID"},
+				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要删除的应用ID", Group: "input"},
+				{Name: "result", Type: "custom", Location: "body", Required: false, Description: "删除操作结果", Group: "output", Ref: &operationResultTypeID},
 			},
 		},
 		// 接口管理接口
@@ -206,16 +290,17 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/interfaces",
 			Method:      "POST",
 			Parameters: []InterfaceParam{
-				{Name: "app_id", Type: "number", Location: "body", Required: true, Description: "所属应用ID，接口必须归属于某个应用"},
-				{Name: "name", Type: "string", Location: "body", Required: true, Description: "接口名称，在同一应用内必须唯一"},
-				{Name: "description", Type: "string", Location: "body", Required: false, Description: "接口描述，详细说明接口的功能和用法"},
-				{Name: "protocol", Type: "string", Location: "body", Required: true, Description: "协议类型，目前仅支持'http'"},
-				{Name: "url", Type: "string", Location: "body", Required: true, Description: "接口URL，支持{name}格式的path参数占位符"},
-				{Name: "method", Type: "string", Location: "body", Required: true, Description: "HTTP方法: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS"},
-				{Name: "auth_type", Type: "string", Location: "body", Required: true, Description: "鉴权类型，目前仅支持'none'"},
-				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用接口，默认为true"},
-				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本，用于处理接口返回结果"},
-				{Name: "parameters", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "接口参数列表，InterfaceParameter类型的数组", Ref: &interfaceParamTypeID},
+				{Name: "app_id", Type: "number", Location: "body", Required: true, Description: "所属应用ID，接口必须归属于某个应用", Group: "input"},
+				{Name: "name", Type: "string", Location: "body", Required: true, Description: "接口名称，在同一应用内必须唯一", Group: "input"},
+				{Name: "description", Type: "string", Location: "body", Required: false, Description: "接口描述，详细说明接口的功能和用法", Group: "input"},
+				{Name: "protocol", Type: "string", Location: "body", Required: true, Description: "协议类型，目前仅支持'http'", Group: "input"},
+				{Name: "url", Type: "string", Location: "body", Required: true, Description: "接口URL，支持{name}格式的path参数占位符", Group: "input"},
+				{Name: "method", Type: "string", Location: "body", Required: true, Description: "HTTP方法: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS", Group: "input"},
+				{Name: "auth_type", Type: "string", Location: "body", Required: true, Description: "鉴权类型，目前仅支持'none'", Group: "input"},
+				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用接口，默认为true", Group: "input"},
+				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本，用于处理接口返回结果", Group: "input"},
+				{Name: "parameters", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "接口参数列表，InterfaceParameter类型的数组", Group: "input", Ref: &interfaceParamTypeID},
+				{Name: "interface", Type: "custom", Location: "body", Required: false, Description: "创建成功后返回的接口完整信息", Group: "output", Ref: &interfaceResponseTypeID},
 			},
 		},
 		{
@@ -224,7 +309,8 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/interfaces",
 			Method:      "GET",
 			Parameters: []InterfaceParam{
-				{Name: "app_id", Type: "number", Location: "query", Required: true, Description: "应用ID，查询该应用下的所有接口"},
+				{Name: "app_id", Type: "number", Location: "query", Required: true, Description: "应用ID，查询该应用下的所有接口", Group: "input"},
+				{Name: "interfaces", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "接口列表数组", Group: "output", Ref: &interfaceResponseTypeID},
 			},
 		},
 		{
@@ -233,7 +319,8 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/interfaces/{id}",
 			Method:      "GET",
 			Parameters: []InterfaceParam{
-				{Name: "id", Type: "number", Location: "path", Required: true, Description: "接口ID"},
+				{Name: "id", Type: "number", Location: "path", Required: true, Description: "接口ID", Group: "input"},
+				{Name: "interface", Type: "custom", Location: "body", Required: false, Description: "接口完整信息", Group: "output", Ref: &interfaceResponseTypeID},
 			},
 		},
 		{
@@ -242,16 +329,17 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/interfaces/{id}",
 			Method:      "PUT",
 			Parameters: []InterfaceParam{
-				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要更新的接口ID"},
-				{Name: "name", Type: "string", Location: "body", Required: false, Description: "接口名称，在同一应用内必须唯一"},
-				{Name: "description", Type: "string", Location: "body", Required: false, Description: "接口描述"},
-				{Name: "protocol", Type: "string", Location: "body", Required: false, Description: "协议类型，目前仅支持'http'"},
-				{Name: "url", Type: "string", Location: "body", Required: false, Description: "接口URL，支持{name}格式的path参数占位符"},
-				{Name: "method", Type: "string", Location: "body", Required: false, Description: "HTTP方法"},
-				{Name: "auth_type", Type: "string", Location: "body", Required: false, Description: "鉴权类型"},
-				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用接口"},
-				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本"},
-				{Name: "parameters", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "接口参数列表，如果提供则完全替换原有参数", Ref: &interfaceParamTypeID},
+				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要更新的接口ID", Group: "input"},
+				{Name: "name", Type: "string", Location: "body", Required: false, Description: "接口名称，在同一应用内必须唯一", Group: "input"},
+				{Name: "description", Type: "string", Location: "body", Required: false, Description: "接口描述", Group: "input"},
+				{Name: "protocol", Type: "string", Location: "body", Required: false, Description: "协议类型，目前仅支持'http'", Group: "input"},
+				{Name: "url", Type: "string", Location: "body", Required: false, Description: "接口URL，支持{name}格式的path参数占位符", Group: "input"},
+				{Name: "method", Type: "string", Location: "body", Required: false, Description: "HTTP方法", Group: "input"},
+				{Name: "auth_type", Type: "string", Location: "body", Required: false, Description: "鉴权类型", Group: "input"},
+				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用接口", Group: "input"},
+				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本", Group: "input"},
+				{Name: "parameters", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "接口参数列表，如果提供则完全替换原有参数", Group: "input", Ref: &interfaceParamTypeID},
+				{Name: "interface", Type: "custom", Location: "body", Required: false, Description: "更新后的接口完整信息", Group: "output", Ref: &interfaceResponseTypeID},
 			},
 		},
 		{
@@ -260,7 +348,8 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/interfaces/{id}",
 			Method:      "DELETE",
 			Parameters: []InterfaceParam{
-				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要删除的接口ID"},
+				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要删除的接口ID", Group: "input"},
+				{Name: "result", Type: "custom", Location: "body", Required: false, Description: "删除操作结果", Group: "output", Ref: &operationResultTypeID},
 			},
 		},
 		// 自定义类型管理接口
@@ -270,10 +359,11 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/custom-types",
 			Method:      "POST",
 			Parameters: []InterfaceParam{
-				{Name: "app_id", Type: "number", Location: "body", Required: true, Description: "所属应用ID，自定义类型必须归属于某个应用"},
-				{Name: "name", Type: "string", Location: "body", Required: true, Description: "类型名称，在同一应用内必须唯一"},
-				{Name: "description", Type: "string", Location: "body", Required: false, Description: "类型描述，说明类型的用途和结构"},
-				{Name: "fields", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "字段列表，CustomTypeField类型的数组", Ref: &customTypeFieldTypeID},
+				{Name: "app_id", Type: "number", Location: "body", Required: true, Description: "所属应用ID，自定义类型必须归属于某个应用", Group: "input"},
+				{Name: "name", Type: "string", Location: "body", Required: true, Description: "类型名称，在同一应用内必须唯一", Group: "input"},
+				{Name: "description", Type: "string", Location: "body", Required: false, Description: "类型描述，说明类型的用途和结构", Group: "input"},
+				{Name: "fields", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "字段列表，CustomTypeField类型的数组", Group: "input", Ref: &customTypeFieldTypeID},
+				{Name: "custom_type", Type: "custom", Location: "body", Required: false, Description: "创建成功后返回的自定义类型完整信息", Group: "output", Ref: &customTypeResponseTypeID},
 			},
 		},
 		{
@@ -282,7 +372,8 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/custom-types",
 			Method:      "GET",
 			Parameters: []InterfaceParam{
-				{Name: "app_id", Type: "number", Location: "query", Required: true, Description: "应用ID，查询该应用下的所有自定义类型"},
+				{Name: "app_id", Type: "number", Location: "query", Required: true, Description: "应用ID，查询该应用下的所有自定义类型", Group: "input"},
+				{Name: "custom_types", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "自定义类型列表数组", Group: "output", Ref: &customTypeResponseTypeID},
 			},
 		},
 		{
@@ -291,7 +382,8 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/custom-types/{id}",
 			Method:      "GET",
 			Parameters: []InterfaceParam{
-				{Name: "id", Type: "number", Location: "path", Required: true, Description: "类型ID"},
+				{Name: "id", Type: "number", Location: "path", Required: true, Description: "类型ID", Group: "input"},
+				{Name: "custom_type", Type: "custom", Location: "body", Required: false, Description: "自定义类型完整信息", Group: "output", Ref: &customTypeResponseTypeID},
 			},
 		},
 		{
@@ -300,10 +392,11 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/custom-types/{id}",
 			Method:      "PUT",
 			Parameters: []InterfaceParam{
-				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要更新的类型ID"},
-				{Name: "name", Type: "string", Location: "body", Required: false, Description: "类型名称，在同一应用内必须唯一"},
-				{Name: "description", Type: "string", Location: "body", Required: false, Description: "类型描述"},
-				{Name: "fields", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "字段列表，如果提供则完全替换原有字段", Ref: &customTypeFieldTypeID},
+				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要更新的类型ID", Group: "input"},
+				{Name: "name", Type: "string", Location: "body", Required: false, Description: "类型名称，在同一应用内必须唯一", Group: "input"},
+				{Name: "description", Type: "string", Location: "body", Required: false, Description: "类型描述", Group: "input"},
+				{Name: "fields", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "字段列表，如果提供则完全替换原有字段", Group: "input", Ref: &customTypeFieldTypeID},
+				{Name: "custom_type", Type: "custom", Location: "body", Required: false, Description: "更新后的自定义类型完整信息", Group: "output", Ref: &customTypeResponseTypeID},
 			},
 		},
 		{
@@ -312,7 +405,8 @@ func InitDefaultData() {
 			URL:         "http://localhost:8080/api/custom-types/{id}",
 			Method:      "DELETE",
 			Parameters: []InterfaceParam{
-				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要删除的类型ID"},
+				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要删除的类型ID", Group: "input"},
+				{Name: "result", Type: "custom", Location: "body", Required: false, Description: "删除操作结果", Group: "output", Ref: &operationResultTypeID},
 			},
 		},
 	}
@@ -341,15 +435,17 @@ func InitDefaultData() {
 		// 创建接口参数
 		for _, paramData := range ifaceData.Parameters {
 			param := models.InterfaceParameter{
-				AppID:       app.ID,
-				InterfaceID: iface.ID,
-				Name:        paramData.Name,
-				Type:        paramData.Type,
-				Location:    paramData.Location,
-				IsArray:     paramData.IsArray,
-				Required:    paramData.Required,
-				Description: paramData.Description,
-				Ref:         paramData.Ref,
+				AppID:        app.ID,
+				InterfaceID:  iface.ID,
+				Name:         paramData.Name,
+				Type:         paramData.Type,
+				Location:     paramData.Location,
+				IsArray:      paramData.IsArray,
+				Required:     paramData.Required,
+				Description:  paramData.Description,
+				DefaultValue: paramData.DefaultValue,
+				Group:        paramData.Group,
+				Ref:          paramData.Ref,
 			}
 
 			if err := db.Create(&param).Error; err != nil {
