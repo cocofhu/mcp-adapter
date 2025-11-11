@@ -26,7 +26,12 @@ func CallHTTPInterfaceWithParams(ctx context.Context, iface *models.Interface, a
 	if err != nil {
 		return nil, 0, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}(resp.Body)
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp.StatusCode, err
@@ -51,7 +56,6 @@ func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, ar
 		method = http.MethodGet
 	}
 
-	// Prepare containers
 	queryVals := url.Values{}
 	bodyMap := make(map[string]any)
 	headers := make(http.Header)
@@ -72,14 +76,13 @@ func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, ar
 			case "header":
 				headers.Set(name, fmt.Sprintf("%v", val))
 			case "path":
-				// Path 参数需要在 URL 中替换占位符
-				// 例如: /users/{id} -> /users/123
-				// 这里暂时不处理，可以后续扩展
+				log.Printf("unhandled path parameter: %s", name)
 			default: // body
 				bodyMap[name] = val
 			}
 		} else {
 			// 如果参数未定义，默认放到 body
+			log.Printf("unhandled path parameter: %s", name)
 			bodyMap[name] = val
 		}
 	}
