@@ -307,13 +307,16 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 				log.Printf("Error calling tool %s, code: %d", ifaceCopy.Name, code)
 			}
 			if shouldStructuredOutput {
-				out, text, err := parseStructuredOutput(data, outputSchemaCopy)
+				out, _, err := parseStructuredOutput(data, outputSchemaCopy)
 				if err != nil {
 					return mcp.NewToolResultError(fmt.Sprintf("failed to parse structured output: %v", err)), nil
 				}
 				filtered := filterOutputBySchema(out, outputSchemaCopy)
-
-				return mcp.NewToolResultStructured(filtered, text), nil
+				bytes, err := json.Marshal(filtered)
+				if err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("failed to marshal filtered output: %v", err)), nil
+				}
+				return mcp.NewToolResultStructured(filtered, string(bytes)), nil
 			}
 			return mcp.NewToolResultText(string(data)), nil
 		})
