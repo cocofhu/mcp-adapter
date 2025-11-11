@@ -928,13 +928,30 @@ document.getElementById('interface-form-submit').addEventListener('click', async
     const parameters = [];
     
     // 收集所有三个 Tab 的参数
+    let validationError = null;
     ['input', 'output', 'fixed'].forEach(tabName => {
         const containerId = `${tabName}-params-container`;
         document.querySelectorAll(`#${containerId} .param-row`).forEach(row => {
             const param = collectParamFromRow(row);
-            if (param) parameters.push(param);
+            if (param) {
+                // 验证 fixed 参数必须有默认值且不能是数组
+                if (param.group === 'fixed') {
+                    if (!param.default_value || param.default_value.trim() === '') {
+                        validationError = `Fixed 参数 "${param.name}" 必须设置默认值`;
+                    }
+                    if (param.is_array) {
+                        validationError = `Fixed 参数 "${param.name}" 不能是数组类型`;
+                    }
+                }
+                parameters.push(param);
+            }
         });
     });
+    
+    if (validationError) {
+        showToast(validationError, 'error');
+        return;
+    }
     
     try {
         if (currentInterfaceId) {
@@ -1004,9 +1021,10 @@ function collectParamFromRow(row) {
         param.ref = parseInt(paramRef);
     }
     
-    // 保存默认值（如果有）
-    const isBasicType = ['string', 'number', 'boolean'].includes(paramType);
-    if (isBasicType && paramDefaultValue) {
+    // 保存默认值
+    // Fixed 参数必须有默认值
+    // Input 参数不再支持默认值（已移除该功能）
+    if (paramGroup === 'fixed' && paramDefaultValue) {
         param.default_value = paramDefaultValue;
     }
     
@@ -1165,14 +1183,14 @@ function addParamRow(paramData = null) {
     const isBasicType = ['string', 'number', 'boolean'].includes(currentType);
     
     // Fixed 参数需要显示默认值输入框（必填）
-    // Input 参数可选显示默认值
+    // Input 参数不显示默认值（已移除该功能）
     // Output 参数不需要默认值
-    const showDefaultValue = (group === 'fixed') || (group === 'input' && isBasicType);
-    const defaultValueRequired = (group === 'fixed') ? '（必填）' : '（可选）';
+    const showDefaultValue = (group === 'fixed');
+    const defaultValueRequired = (group === 'fixed') ? '（必填）' : '';
     
     const defaultValueHTML = showDefaultValue ? `
         <div class="form-row param-extra-row" style="margin-top: 4px;">
-            <input type="text" class="param-default-input" placeholder="默认值${defaultValueRequired}" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1; ${isBasicType ? '' : 'display: none;'}">
+            <input type="text" class="param-default-input" placeholder="默认值${defaultValueRequired}" value="${paramData && paramData.default_value ? paramData.default_value : ''}" style="flex: 1;" required>
             <input type="text" class="param-desc-input" placeholder="参数描述（可选）" value="${paramData && paramData.description ? paramData.description : ''}" style="flex: 1;">
         </div>
     ` : `
@@ -1196,7 +1214,7 @@ function addParamRow(paramData = null) {
                 <option value="path" ${paramData && paramData.location === 'path' ? 'selected' : ''}>path</option>
             </select>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-                <input type="checkbox" class="param-array-checkbox" ${paramData && paramData.is_array ? 'checked' : ''} onchange="handleParamArrayChange(this)">
+                <input type="checkbox" class="param-array-checkbox" ${paramData && paramData.is_array ? 'checked' : ''} ${group === 'fixed' ? 'disabled' : ''} onchange="handleParamArrayChange(this)">
                 数组
             </label>
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
@@ -1210,12 +1228,18 @@ function addParamRow(paramData = null) {
         ${defaultValueHTML}
     `;
     
-    // Fixed 参数默认为必填且不可修改
+    // Fixed 参数特殊处理：必填且不可修改，数组选项禁用
     if (group === 'fixed') {
         const requiredCheckbox = row.querySelector('.param-required-checkbox');
         if (requiredCheckbox) {
             requiredCheckbox.checked = true;
             requiredCheckbox.disabled = true;
+        }
+        
+        const arrayCheckbox = row.querySelector('.param-array-checkbox');
+        if (arrayCheckbox) {
+            arrayCheckbox.checked = false;
+            arrayCheckbox.disabled = true;
         }
     }
     container.appendChild(row);

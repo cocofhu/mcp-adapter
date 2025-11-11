@@ -156,7 +156,7 @@ func CreateInterface(req CreateInterfaceRequest) (InterfaceResponse, error) {
 		return InterfaceResponse{}, errors.New("interface name already exists in the application")
 	}
 
-	// 验证参数的 Ref 引用
+	// 验证参数的 Ref 引用和 fixed 参数规则
 	for _, param := range req.Parameters {
 		if param.Type == "custom" && param.Ref != nil {
 			var refType models.CustomType
@@ -165,6 +165,16 @@ func CreateInterface(req CreateInterfaceRequest) (InterfaceResponse, error) {
 			}
 			if refType.AppID != req.AppID {
 				return InterfaceResponse{}, errors.New("parameter reference must belong to the same application")
+			}
+		}
+		
+		// fixed 参数必须有默认值且不能是数组
+		if param.Group == "fixed" {
+			if param.DefaultValue == nil || *param.DefaultValue == "" {
+				return InterfaceResponse{}, errors.New("fixed parameter must have a default value")
+			}
+			if param.IsArray {
+				return InterfaceResponse{}, errors.New("fixed parameter cannot be an array")
 			}
 		}
 	}
@@ -334,7 +344,7 @@ func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
 	// 如果提供了参数列表，则完全替换
 	var params []models.InterfaceParameter
 	if req.Parameters != nil {
-		// 验证参数的 Ref 引用
+		// 验证参数的 Ref 引用和 fixed 参数规则
 		for _, paramReq := range *req.Parameters {
 			if paramReq.Type == "custom" && paramReq.Ref != nil {
 				var refType models.CustomType
@@ -345,6 +355,18 @@ func UpdateInterface(req UpdateInterfaceRequest) (InterfaceResponse, error) {
 				if refType.AppID != existing.AppID {
 					tx.Rollback()
 					return InterfaceResponse{}, errors.New("parameter reference must belong to the same application")
+				}
+			}
+			
+			// fixed 参数必须有默认值且不能是数组
+			if paramReq.Group == "fixed" {
+				if paramReq.DefaultValue == nil || *paramReq.DefaultValue == "" {
+					tx.Rollback()
+					return InterfaceResponse{}, errors.New("fixed parameter must have a default value")
+				}
+				if paramReq.IsArray {
+					tx.Rollback()
+					return InterfaceResponse{}, errors.New("fixed parameter cannot be an array")
 				}
 			}
 		}
