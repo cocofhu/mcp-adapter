@@ -245,8 +245,13 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 		// 从数据库获取接口参数
 		db := database.GetDB()
 		var params []models.InterfaceParameter
-		if db.Where("interface_id = ?", iface.ID).Find(&params).Error != nil {
-			return fmt.Errorf("error getting interface parameters for tool %s", iface.Name)
+		if db.Where("interface_id = ? and `group` <> 'output'", iface.ID).Find(&params).Error != nil {
+			return fmt.Errorf("error getting interface input parameters for tool %s", iface.Name)
+		}
+
+		var outputs []models.InterfaceParameter
+		if db.Where("interface_id = ? and `group` = 'output'", iface.ID).Find(&outputs).Error != nil {
+			return fmt.Errorf("error getting interface output parameters for tool %s", iface.Name)
 		}
 
 		schema, err := BuildMcpInputSchemaByInterface(iface.ID)
@@ -261,6 +266,21 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 
 		log.Printf("Input schema for tool %s: %s", iface.Name, string(marshal))
 		newTool := mcp.NewToolWithRawSchema(iface.Name, iface.Description, marshal)
+
+		var outputSchema map[string]any
+		shouldStructuredOutput := false
+		if len(outputs) > 0 {
+			outputSchema, err = BuildMcpOutputSchemaByInterface(iface.ID)
+			if err != nil {
+				return err
+			}
+			marshal, err = json.Marshal(outputSchema)
+			if err != nil {
+				return err
+			}
+			newTool.RawOutputSchema = marshal
+			shouldStructuredOutput = true
+		}
 
 		// 创建工具的副本以避免闭包捕获
 		ifaceCopy := *iface
@@ -283,6 +303,13 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			}
 			if code != http.StatusOK {
 				log.Printf("Error calling tool %s, code: %d", ifaceCopy.Name, code)
+			}
+			if shouldStructuredOutput {
+				var out map[string]any
+				if err := json.Unmarshal(data, &out); err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("failed to parse structured output: %v", err)), nil
+				}
+				return mcp.NewToolResultStructured(out, string(data)), nil
 			}
 			return mcp.NewToolResultText(string(data)), nil
 		})

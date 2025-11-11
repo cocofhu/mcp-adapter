@@ -72,6 +72,14 @@ func buildMcpSchemaByType(customTypeId int64) (map[string]any, error) {
 }
 
 func BuildMcpInputSchemaByInterface(id int64) (map[string]any, error) {
+	return buildMcpSchemaByInterface(id, "input")
+}
+
+func BuildMcpOutputSchemaByInterface(id int64) (map[string]any, error) {
+	return buildMcpSchemaByInterface(id, "output")
+}
+
+func buildMcpSchemaByInterface(id int64, group string) (map[string]any, error) {
 	db := database.GetDB()
 	var iface models.Interface
 	if err := db.First(&iface, id).Error; err != nil {
@@ -79,7 +87,7 @@ func BuildMcpInputSchemaByInterface(id int64) (map[string]any, error) {
 	}
 	// 获取参数列表，只包含 input 组的参数
 	var params []models.InterfaceParameter
-	if err := db.Where("interface_id = ? AND `group` = ?", iface.ID, "input").Find(&params).Error; err != nil {
+	if err := db.Where("interface_id = ? AND `group` = ?", iface.ID, group).Find(&params).Error; err != nil {
 		return nil, errors.New("failed to fetch interface parameters")
 	}
 	schema := make(map[string]any)
