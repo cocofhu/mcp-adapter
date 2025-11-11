@@ -182,7 +182,7 @@ function renderApplications(apps) {
             </div>
             <div class="card-footer">
                 <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); viewApplicationEndpoint(${app.id})">
-                    <i class="fas fa-eye"></i> 查看接口
+                    <i class="fas fa-link"></i> 接入链接
                 </button>
                 <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); manageApplicationInterfaces(${app.id})">
                     <i class="fas fa-plug"></i> 接口管理
