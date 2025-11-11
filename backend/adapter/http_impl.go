@@ -79,7 +79,18 @@ func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, ar
 		if ok {
 			switch strings.ToLower(p.Location) {
 			case "query":
-				queryVals.Set(name, fmt.Sprintf("%v", val))
+				switch v := val.(type) {
+				case []string:
+					for _, item := range v {
+						queryVals.Add(name, item)
+					}
+				case []interface{}:
+					for _, item := range v {
+						queryVals.Add(name, fmt.Sprintf("%v", item))
+					}
+				default:
+					queryVals.Add(name, fmt.Sprintf("%v", val))
+				}
 			case "header":
 				headers.Set(name, fmt.Sprintf("%v", val))
 			case "path":
