@@ -1024,8 +1024,9 @@ function collectParamFromRow(row) {
     // 保存默认值
     // Fixed 参数必须有默认值
     // Input 参数不再支持默认值（已移除该功能）
-    if (paramGroup === 'fixed' && paramDefaultValue) {
-        param.default_value = paramDefaultValue;
+    // Output 参数不能有默认值
+    if (paramGroup === 'fixed') {
+        param.default_value = paramDefaultValue || '';
     }
     
     if (paramDescription) {
