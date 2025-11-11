@@ -233,7 +233,7 @@ func GetServerImpl(path string) http.Handler {
 	return nil
 }
 
-	// addTool 添加工具到指定应用
+// addTool 添加工具到指定应用
 func (sm *ServerManager) addTool(iface *models.Interface, app *models.Application) error {
 	if s, ok := sm.sseServers.Load(app.Path); ok {
 		srv := s.(*Server)
@@ -270,13 +270,13 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 
 		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := req.GetArguments()
-			
+
 			// 应用默认值并验证参数
 			processedArgs, err := applyDefaultsAndValidate(args, paramsCopy)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			
+
 			data, code, err := CallHTTPInterfaceWithParams(ctx, &ifaceCopy, processedArgs, paramsCopy)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
@@ -297,22 +297,21 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 // applyDefaultsAndValidate 应用默认值并验证参数
 func applyDefaultsAndValidate(args map[string]any, params []models.InterfaceParameter) (map[string]any, error) {
 	processedArgs := make(map[string]any)
-	
+
 	// 首先复制所有提供的参数
 	for k, v := range args {
 		processedArgs[k] = v
 	}
-	
+
 	// 构建参数索引
 	paramIndex := make(map[string]models.InterfaceParameter)
 	for _, p := range params {
 		paramIndex[p.Name] = p
 	}
-	
+
 	// 应用默认值并验证
 	for _, p := range params {
 		_, provided := processedArgs[p.Name]
-		
 		// 如果参数未提供且有默认值，应用默认值
 		if !provided && p.DefaultValue != nil && *p.DefaultValue != "" {
 			// 根据参数类型转换默认值
@@ -323,7 +322,6 @@ func applyDefaultsAndValidate(args map[string]any, params []models.InterfacePara
 			processedArgs[p.Name] = convertedVal
 			log.Printf("Applied default value for parameter %s: %v", p.Name, convertedVal)
 		}
-		
 		// 验证必填参数
 		if p.Required {
 			finalVal, exists := processedArgs[p.Name]
@@ -332,7 +330,7 @@ func applyDefaultsAndValidate(args map[string]any, params []models.InterfacePara
 			}
 		}
 	}
-	
+
 	return processedArgs, nil
 }
 
