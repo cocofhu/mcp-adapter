@@ -233,8 +233,6 @@ function renderApplications(apps) {
         </div>
         `;
     }).join('');
-        </div>
-    `).join('');
 }
 
 // 应用搜索事件监听
