@@ -222,6 +222,8 @@ func BuildHTTPRequestWithParams(ctx context.Context,
 		for k, vs := range tcHeaders {
 			req.Header.Add(k, vs)
 		}
+		log.Printf("%+v", req)
+		return req, nil
 	}
 
 	// Body
