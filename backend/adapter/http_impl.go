@@ -16,8 +16,11 @@ import (
 )
 
 // CallHTTPInterfaceWithParams 使用提供的参数列表执行请求，避免查库
-func CallHTTPInterfaceWithParams(ctx context.Context, iface *models.Interface, args map[string]any, params []models.InterfaceParameter) ([]byte, int, error) {
-	req, err := BuildHTTPRequestWithParams(ctx, iface, args, params)
+func CallHTTPInterfaceWithParams(ctx context.Context, iface *models.Interface,
+	args map[string]any,
+	params []models.InterfaceParameter, ext map[string]string) ([]byte, int, error) {
+
+	req, err := BuildHTTPRequestWithParams(ctx, iface, args, params, ext)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -40,7 +43,10 @@ func CallHTTPInterfaceWithParams(ctx context.Context, iface *models.Interface, a
 }
 
 // BuildHTTPRequestWithParams 使用提供的参数列表构建请求，避免查库
-func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, args map[string]any, params []models.InterfaceParameter) (*http.Request, error) {
+func BuildHTTPRequestWithParams(ctx context.Context,
+	iface *models.Interface,
+	args map[string]any,
+	params []models.InterfaceParameter, ext map[string]string) (*http.Request, error) {
 	if iface == nil {
 		return nil, errors.New("interface is nil")
 	}
@@ -162,6 +168,62 @@ func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, ar
 	}
 	u.RawQuery = queryVals.Encode()
 
+	if iface.AuthType == "capi" {
+		secretId := headers.Get("SecretId")
+		secretKey := headers.Get("SecretKey")
+		if _, ok := ext["SecretId"]; ok && secretId == "" {
+			secretId = ext["SecretId"]
+		}
+		if _, ok := ext["SecretKey"]; ok && secretKey == "" {
+			secretKey = ext["SecretKey"]
+		}
+		if headers.Get("Host") == "" {
+			return nil, errors.New("missing Host in headers for capi auth")
+		}
+		if headers.Get("Service") == "" {
+			return nil, errors.New("missing Service in headers for capi auth")
+		}
+		if headers.Get("Version") == "" {
+			return nil, errors.New("missing Version in headers for capi auth")
+		}
+		if headers.Get("Action") == "" {
+			return nil, errors.New("missing Action in headers for capi auth")
+		}
+		if headers.Get("Region") == "" {
+			return nil, errors.New("missing Region in headers for capi auth")
+		}
+		if secretId == "" || secretKey == "" {
+			return nil, errors.New("missing SecretId or SecretKey for capi auth")
+		}
+
+		tcp := TencentCloudAPIParam{
+			SecretId:  secretId,
+			SecretKey: secretKey,
+			Host:      headers.Get("Host"),
+			Service:   headers.Get("Service"),
+			Version:   headers.Get("Version"),
+			Action:    headers.Get("Action"),
+			Region:    headers.Get("Region"),
+		}
+		b, err := json.Marshal(bodyMap)
+		if err != nil {
+			return nil, fmt.Errorf("marshal body failed: %w", err)
+		}
+		tcp.Payload = string(b)
+		tcHeaders, err := SignatureTCHeader(tcp)
+		if err != nil {
+			return nil, fmt.Errorf("generate tencent cloud api signature failed: %w", err)
+		}
+		body := bytes.NewBuffer(b)
+		req, err := http.NewRequestWithContext(ctx, method, fmt.Sprintf("https://%s", tcp.Host), body)
+		if err != nil {
+			return nil, err
+		}
+		for k, vs := range tcHeaders {
+			req.Header.Add(k, vs)
+		}
+	}
+
 	// Body
 	var body io.Reader
 	if len(bodyMap) > 0 {
@@ -185,6 +247,7 @@ func BuildHTTPRequestWithParams(ctx context.Context, iface *models.Interface, ar
 			req.Header.Add(k, v)
 		}
 	}
+
 	log.Printf("%+v", req)
 	return req, nil
 }
