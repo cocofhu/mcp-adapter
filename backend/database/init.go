@@ -200,7 +200,6 @@ func InitDefaultData() {
 	applicationResponseTypeID := customTypeIDs["ApplicationResponse"]
 	interfaceResponseTypeID := customTypeIDs["InterfaceResponse"]
 	customTypeResponseTypeID := customTypeIDs["CustomTypeResponse"]
-	operationResultTypeID := customTypeIDs["OperationResult"]
 
 	// 为 CustomTypeResponse 添加 fields 字段（引用 CustomTypeField）
 	fieldsField := models.CustomTypeField{
