@@ -138,7 +138,7 @@ func InitDefaultData() {
 		{
 			Name:        "CustomTypeResponse",
 			Description: "自定义类型响应数据（包含字段列表）",
-			Fields:      []CustomTypeFieldDef{
+			Fields: []CustomTypeFieldDef{
 				{Name: "id", Type: "number", Required: true, Description: "类型ID"},
 				{Name: "app_id", Type: "number", Required: true, Description: "所属应用ID"},
 				{Name: "name", Type: "string", Required: true, Description: "类型名称"},
@@ -234,7 +234,17 @@ func InitDefaultData() {
 				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本，用于处理接口返回结果", Group: "input"},
 				{Name: "environment", Type: "string", Location: "body", Required: false, Description: "环境变量，JSON字符串格式", Group: "input"},
 				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用应用，默认为true", Group: "input"},
-				{Name: "application", Type: "custom", Location: "body", Required: false, Description: "创建成功后返回的应用完整信息", Group: "output", Ref: &applicationResponseTypeID},
+
+				{Name: "id", Type: "number", Required: true, Description: "应用ID", Group: "output"},
+				{Name: "name", Type: "string", Required: true, Description: "应用名称", Group: "output"},
+				{Name: "description", Type: "string", Required: false, Description: "应用描述", Group: "output"},
+				{Name: "path", Type: "string", Required: true, Description: "应用路径", Group: "output"},
+				{Name: "protocol", Type: "string", Required: true, Description: "应用协议", Group: "output"},
+				{Name: "post_process", Type: "string", Required: false, Description: "后处理脚本", Group: "output"},
+				{Name: "environment", Type: "string", Required: false, Description: "环境变量", Group: "output"},
+				{Name: "enabled", Type: "boolean", Required: true, Description: "是否启用", Group: "output"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间", Group: "output"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间", Group: "output"},
 			},
 		},
 		{
@@ -253,7 +263,17 @@ func InitDefaultData() {
 			Method:      "GET",
 			Parameters: []InterfaceParam{
 				{Name: "id", Type: "number", Location: "path", Required: true, Description: "应用ID", Group: "input"},
-				{Name: "application", Type: "custom", Location: "body", Required: false, Description: "应用完整信息", Group: "output", Ref: &applicationResponseTypeID},
+
+				{Name: "id", Type: "number", Required: true, Description: "应用ID", Group: "output"},
+				{Name: "name", Type: "string", Required: true, Description: "应用名称", Group: "output"},
+				{Name: "description", Type: "string", Required: false, Description: "应用描述", Group: "output"},
+				{Name: "path", Type: "string", Required: true, Description: "应用路径", Group: "output"},
+				{Name: "protocol", Type: "string", Required: true, Description: "应用协议", Group: "output"},
+				{Name: "post_process", Type: "string", Required: false, Description: "后处理脚本", Group: "output"},
+				{Name: "environment", Type: "string", Required: false, Description: "环境变量", Group: "output"},
+				{Name: "enabled", Type: "boolean", Required: true, Description: "是否启用", Group: "output"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间", Group: "output"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间", Group: "output"},
 			},
 		},
 		{
@@ -270,7 +290,17 @@ func InitDefaultData() {
 				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本", Group: "input"},
 				{Name: "environment", Type: "string", Location: "body", Required: false, Description: "环境变量，JSON字符串格式", Group: "input"},
 				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用应用", Group: "input"},
-				{Name: "application", Type: "custom", Location: "body", Required: false, Description: "更新后的应用完整信息", Group: "output", Ref: &applicationResponseTypeID},
+
+				{Name: "id", Type: "number", Required: true, Description: "应用ID", Group: "output"},
+				{Name: "name", Type: "string", Required: true, Description: "应用名称", Group: "output"},
+				{Name: "description", Type: "string", Required: false, Description: "应用描述", Group: "output"},
+				{Name: "path", Type: "string", Required: true, Description: "应用路径", Group: "output"},
+				{Name: "protocol", Type: "string", Required: true, Description: "应用协议", Group: "output"},
+				{Name: "post_process", Type: "string", Required: false, Description: "后处理脚本", Group: "output"},
+				{Name: "environment", Type: "string", Required: false, Description: "环境变量", Group: "output"},
+				{Name: "enabled", Type: "boolean", Required: true, Description: "是否启用", Group: "output"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间", Group: "output"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间", Group: "output"},
 			},
 		},
 		{
@@ -280,7 +310,9 @@ func InitDefaultData() {
 			Method:      "DELETE",
 			Parameters: []InterfaceParam{
 				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要删除的应用ID", Group: "input"},
-				{Name: "result", Type: "custom", Location: "body", Required: false, Description: "删除操作结果", Group: "output", Ref: &operationResultTypeID},
+
+				{Name: "success", Type: "boolean", Required: true, Description: "操作是否成功", Group: "output"},
+				{Name: "message", Type: "string", Required: false, Description: "结果消息", Group: "output"},
 			},
 		},
 		// 接口管理接口
@@ -300,7 +332,19 @@ func InitDefaultData() {
 				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用接口，默认为true", Group: "input"},
 				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本，用于处理接口返回结果", Group: "input"},
 				{Name: "parameters", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "接口参数列表，InterfaceParameter类型的数组", Group: "input", Ref: &interfaceParamTypeID},
-				{Name: "interface", Type: "custom", Location: "body", Required: false, Description: "创建成功后返回的接口完整信息", Group: "output", Ref: &interfaceResponseTypeID},
+
+				{Name: "id", Type: "number", Required: true, Description: "接口ID", Group: "output"},
+				{Name: "app_id", Type: "number", Required: true, Description: "所属应用ID", Group: "output"},
+				{Name: "name", Type: "string", Required: true, Description: "接口名称", Group: "output"},
+				{Name: "description", Type: "string", Required: false, Description: "接口描述", Group: "output"},
+				{Name: "protocol", Type: "string", Required: true, Description: "协议类型", Group: "output"},
+				{Name: "url", Type: "string", Required: true, Description: "接口URL", Group: "output"},
+				{Name: "method", Type: "string", Required: true, Description: "HTTP方法", Group: "output"},
+				{Name: "auth_type", Type: "string", Required: true, Description: "鉴权类型", Group: "output"},
+				{Name: "enabled", Type: "boolean", Required: true, Description: "是否启用", Group: "output"},
+				{Name: "post_process", Type: "string", Required: false, Description: "后处理脚本", Group: "output"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间", Group: "output"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间", Group: "output"},
 			},
 		},
 		{
@@ -320,7 +364,19 @@ func InitDefaultData() {
 			Method:      "GET",
 			Parameters: []InterfaceParam{
 				{Name: "id", Type: "number", Location: "path", Required: true, Description: "接口ID", Group: "input"},
-				{Name: "interface", Type: "custom", Location: "body", Required: false, Description: "接口完整信息", Group: "output", Ref: &interfaceResponseTypeID},
+
+				{Name: "id", Type: "number", Required: true, Description: "接口ID", Group: "output"},
+				{Name: "app_id", Type: "number", Required: true, Description: "所属应用ID", Group: "output"},
+				{Name: "name", Type: "string", Required: true, Description: "接口名称", Group: "output"},
+				{Name: "description", Type: "string", Required: false, Description: "接口描述", Group: "output"},
+				{Name: "protocol", Type: "string", Required: true, Description: "协议类型", Group: "output"},
+				{Name: "url", Type: "string", Required: true, Description: "接口URL", Group: "output"},
+				{Name: "method", Type: "string", Required: true, Description: "HTTP方法", Group: "output"},
+				{Name: "auth_type", Type: "string", Required: true, Description: "鉴权类型", Group: "output"},
+				{Name: "enabled", Type: "boolean", Required: true, Description: "是否启用", Group: "output"},
+				{Name: "post_process", Type: "string", Required: false, Description: "后处理脚本", Group: "output"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间", Group: "output"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间", Group: "output"},
 			},
 		},
 		{
@@ -339,7 +395,19 @@ func InitDefaultData() {
 				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用接口", Group: "input"},
 				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本", Group: "input"},
 				{Name: "parameters", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "接口参数列表，如果提供则完全替换原有参数", Group: "input", Ref: &interfaceParamTypeID},
-				{Name: "interface", Type: "custom", Location: "body", Required: false, Description: "更新后的接口完整信息", Group: "output", Ref: &interfaceResponseTypeID},
+
+				{Name: "id", Type: "number", Required: true, Description: "接口ID", Group: "output"},
+				{Name: "app_id", Type: "number", Required: true, Description: "所属应用ID", Group: "output"},
+				{Name: "name", Type: "string", Required: true, Description: "接口名称", Group: "output"},
+				{Name: "description", Type: "string", Required: false, Description: "接口描述", Group: "output"},
+				{Name: "protocol", Type: "string", Required: true, Description: "协议类型", Group: "output"},
+				{Name: "url", Type: "string", Required: true, Description: "接口URL", Group: "output"},
+				{Name: "method", Type: "string", Required: true, Description: "HTTP方法", Group: "output"},
+				{Name: "auth_type", Type: "string", Required: true, Description: "鉴权类型", Group: "output"},
+				{Name: "enabled", Type: "boolean", Required: true, Description: "是否启用", Group: "output"},
+				{Name: "post_process", Type: "string", Required: false, Description: "后处理脚本", Group: "output"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间", Group: "output"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间", Group: "output"},
 			},
 		},
 		{
@@ -349,7 +417,9 @@ func InitDefaultData() {
 			Method:      "DELETE",
 			Parameters: []InterfaceParam{
 				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要删除的接口ID", Group: "input"},
-				{Name: "result", Type: "custom", Location: "body", Required: false, Description: "删除操作结果", Group: "output", Ref: &operationResultTypeID},
+
+				{Name: "success", Type: "boolean", Required: true, Description: "操作是否成功", Group: "output"},
+				{Name: "message", Type: "string", Required: false, Description: "结果消息", Group: "output"},
 			},
 		},
 		// 自定义类型管理接口
@@ -363,7 +433,13 @@ func InitDefaultData() {
 				{Name: "name", Type: "string", Location: "body", Required: true, Description: "类型名称，在同一应用内必须唯一", Group: "input"},
 				{Name: "description", Type: "string", Location: "body", Required: false, Description: "类型描述，说明类型的用途和结构", Group: "input"},
 				{Name: "fields", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "字段列表，CustomTypeField类型的数组", Group: "input", Ref: &customTypeFieldTypeID},
-				{Name: "custom_type", Type: "custom", Location: "body", Required: false, Description: "创建成功后返回的自定义类型完整信息", Group: "output", Ref: &customTypeResponseTypeID},
+
+				{Name: "id", Type: "number", Required: true, Description: "类型ID", Group: "output"},
+				{Name: "app_id", Type: "number", Required: true, Description: "所属应用ID", Group: "output"},
+				{Name: "name", Type: "string", Required: true, Description: "类型名称", Group: "output"},
+				{Name: "description", Type: "string", Required: false, Description: "类型描述", Group: "output"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间", Group: "output"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间", Group: "output"},
 			},
 		},
 		{
@@ -383,7 +459,13 @@ func InitDefaultData() {
 			Method:      "GET",
 			Parameters: []InterfaceParam{
 				{Name: "id", Type: "number", Location: "path", Required: true, Description: "类型ID", Group: "input"},
-				{Name: "custom_type", Type: "custom", Location: "body", Required: false, Description: "自定义类型完整信息", Group: "output", Ref: &customTypeResponseTypeID},
+
+				{Name: "id", Type: "number", Required: true, Description: "类型ID", Group: "output"},
+				{Name: "app_id", Type: "number", Required: true, Description: "所属应用ID", Group: "output"},
+				{Name: "name", Type: "string", Required: true, Description: "类型名称", Group: "output"},
+				{Name: "description", Type: "string", Required: false, Description: "类型描述", Group: "output"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间", Group: "output"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间", Group: "output"},
 			},
 		},
 		{
@@ -396,7 +478,13 @@ func InitDefaultData() {
 				{Name: "name", Type: "string", Location: "body", Required: false, Description: "类型名称，在同一应用内必须唯一", Group: "input"},
 				{Name: "description", Type: "string", Location: "body", Required: false, Description: "类型描述", Group: "input"},
 				{Name: "fields", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "字段列表，如果提供则完全替换原有字段", Group: "input", Ref: &customTypeFieldTypeID},
-				{Name: "custom_type", Type: "custom", Location: "body", Required: false, Description: "更新后的自定义类型完整信息", Group: "output", Ref: &customTypeResponseTypeID},
+
+				{Name: "id", Type: "number", Required: true, Description: "类型ID", Group: "output"},
+				{Name: "app_id", Type: "number", Required: true, Description: "所属应用ID", Group: "output"},
+				{Name: "name", Type: "string", Required: true, Description: "类型名称", Group: "output"},
+				{Name: "description", Type: "string", Required: false, Description: "类型描述", Group: "output"},
+				{Name: "created_at", Type: "string", Required: true, Description: "创建时间", Group: "output"},
+				{Name: "updated_at", Type: "string", Required: true, Description: "更新时间", Group: "output"},
 			},
 		},
 		{
@@ -406,7 +494,9 @@ func InitDefaultData() {
 			Method:      "DELETE",
 			Parameters: []InterfaceParam{
 				{Name: "id", Type: "number", Location: "path", Required: true, Description: "要删除的类型ID", Group: "input"},
-				{Name: "result", Type: "custom", Location: "body", Required: false, Description: "删除操作结果", Group: "output", Ref: &operationResultTypeID},
+
+				{Name: "success", Type: "boolean", Required: true, Description: "操作是否成功", Group: "output"},
+				{Name: "message", Type: "string", Required: false, Description: "结果消息", Group: "output"},
 			},
 		},
 	}
