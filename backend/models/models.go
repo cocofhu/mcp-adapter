@@ -82,3 +82,14 @@ type InterfaceParameter struct {
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 }
+
+// EventLog 事件日志表
+type EventLog struct {
+	ID              int64          `json:"id" gorm:"primaryKey;autoIncrement"`
+	InterfaceData   *string        `json:"interface_data" gorm:"type:text"`   // Interface 对象的 JSON 序列化（可为空）
+	ApplicationData *string        `json:"application_data" gorm:"type:text"` // Application 对象的 JSON 序列化（可为空）
+	EventCode       int            `json:"event_code" gorm:"not null;index"`  // 事件类型代码
+	CreatedAt       time.Time      `json:"created_at" gorm:"index"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt `json:"-" gorm:"index"`
+}

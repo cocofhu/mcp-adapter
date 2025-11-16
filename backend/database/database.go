@@ -35,6 +35,7 @@ func InitDatabase(dbPath string) {
 		&models.CustomType{},
 		&models.CustomTypeField{},
 		&models.InterfaceParameter{},
+		&models.EventLog{},
 	)
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
