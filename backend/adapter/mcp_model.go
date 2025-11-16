@@ -19,7 +19,6 @@ import (
 // ServerManager 管理所有 MCP 服务器的生命周期
 type ServerManager struct {
 	sseServers sync.Map           // path -> *Server
-	eventChan  chan Event         // 事件通道 (已废弃，保留用于兼容)
 	ctx        context.Context    // 控制 goroutine 生命周期
 	cancel     context.CancelFunc // 取消函数
 	wg         sync.WaitGroup     // 等待 goroutine 完成
@@ -135,9 +134,8 @@ func InitServer() {
 	initOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		serverManager = &ServerManager{
-			eventChan: make(chan Event, 100), // 增加缓冲区大小
-			ctx:       ctx,
-			cancel:    cancel,
+			ctx:    ctx,
+			cancel: cancel,
 		}
 
 		// 加载现有应用

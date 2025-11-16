@@ -22,12 +22,12 @@ func InitDatabase(dbPath string) {
 
 	// 检查是否设置了 MYSQL_DSN 环境变量
 	mysqlDSN := os.Getenv("MYSQL_DSN")
-	
+
 	if mysqlDSN != "" {
 		// 使用 MySQL
 		log.Println("Using MySQL database")
 		db, err = gorm.Open(mysql.Open(mysqlDSN), &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Info),
+			Logger: logger.Default.LogMode(logger.Warn),
 		})
 		if err != nil {
 			log.Fatal("Failed to connect to MySQL database:", err)
