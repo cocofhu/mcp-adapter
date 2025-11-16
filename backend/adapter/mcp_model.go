@@ -392,14 +392,17 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 
 		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := req.GetArguments()
-
 			// 应用默认值并验证参数
 			processedArgs, err := applyDefaultsAndValidate(args, paramsCopy)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-
-			data, code, err := CallHTTPInterfaceWithParams(ctx, &ifaceCopy, processedArgs, paramsCopy)
+			ext := make(map[string]string)
+			if iface.AuthType == "capi" {
+				ext["SecretId"] = req.Header.Get("TC-API-SecretId")
+				ext["SecretKey"] = req.Header.Get("TC-API-SecretKey")
+			}
+			data, code, err := CallHTTPInterfaceWithParams(ctx, &ifaceCopy, processedArgs, paramsCopy, ext)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

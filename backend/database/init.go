@@ -327,7 +327,7 @@ func InitDefaultData() {
 				{Name: "protocol", Type: "string", Location: "body", Required: true, Description: "协议类型，目前仅支持'http'", Group: "input"},
 				{Name: "url", Type: "string", Location: "body", Required: true, Description: "接口URL，支持{name}格式的path参数占位符", Group: "input"},
 				{Name: "method", Type: "string", Location: "body", Required: true, Description: "HTTP方法: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS", Group: "input"},
-				{Name: "auth_type", Type: "string", Location: "body", Required: true, Description: "鉴权类型，目前仅支持'none'", Group: "input"},
+				{Name: "auth_type", Type: "string", Location: "body", Required: true, Description: "鉴权类型，目前仅支持'none和capi'", Group: "input"},
 				{Name: "enabled", Type: "boolean", Location: "body", Required: false, Description: "是否启用接口，默认为true", Group: "input"},
 				{Name: "post_process", Type: "string", Location: "body", Required: false, Description: "后处理脚本，用于处理接口返回结果", Group: "input"},
 				{Name: "parameters", Type: "custom", Location: "body", IsArray: true, Required: false, Description: "接口参数列表，InterfaceParameter类型的数组", Group: "input", Ref: &interfaceParamTypeID},
