@@ -10,7 +10,7 @@ import (
 type Application struct {
 	ID          int64          `json:"id" gorm:"primaryKey"`
 	Name        string         `json:"name" gorm:"not null;size:255" validate:"required"` // 应用名称
-	Description string         `json:"description" gorm:"size:500"`                       // 应用描述
+	Description string         `json:"description" gorm:"type:text"`                      // 应用描述
 	Path        string         `json:"path" gorm:"size:255"`                              // 应用路径标识
 	Protocol    string         `json:"protocol" gorm:"size:255"`                          // 应用对外协议 sse, streamable
 	PostProcess string         `json:"post_process" gorm:"type:text"`                     // 后处理脚本
