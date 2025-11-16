@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,11 +19,11 @@ import (
 // ServerManager 管理所有 MCP 服务器的生命周期
 type ServerManager struct {
 	sseServers sync.Map           // path -> *Server
-	eventChan  chan Event         // 事件通道
 	ctx        context.Context    // 控制 goroutine 生命周期
 	cancel     context.CancelFunc // 取消函数
 	wg         sync.WaitGroup     // 等待 goroutine 完成
 	mu         sync.RWMutex       // 保护并发操作
+	maxEventID int64              // 记录已处理的最大事件ID
 }
 
 var serverManager *ServerManager
@@ -92,14 +93,40 @@ func SendEvent(evt Event) {
 		return
 	}
 
-	select {
-	case serverManager.eventChan <- evt:
-		log.Printf("Event sent: %v", evt.Code)
-	case <-serverManager.ctx.Done():
-		log.Printf("Warning: ServerManager shutting down, event dropped: %v", evt.Code)
-	default:
-		log.Printf("Warning: Event channel full, dropping event: %v", evt.Code)
+	// 将事件写入数据库
+	db := database.GetDB()
+	eventLog := models.EventLog{
+		EventCode: int(evt.Code),
 	}
+
+	// 序列化 Interface 为 JSON
+	if evt.Interface != nil {
+		interfaceJSON, err := json.Marshal(evt.Interface)
+		if err != nil {
+			log.Printf("Error marshaling interface: %v", err)
+			return
+		}
+		interfaceStr := string(interfaceJSON)
+		eventLog.InterfaceData = &interfaceStr
+	}
+
+	// 序列化 Application 为 JSON
+	if evt.App != nil {
+		appJSON, err := json.Marshal(evt.App)
+		if err != nil {
+			log.Printf("Error marshaling application: %v", err)
+			return
+		}
+		appStr := string(appJSON)
+		eventLog.ApplicationData = &appStr
+	}
+
+	if err := db.Create(&eventLog).Error; err != nil {
+		log.Printf("Error saving event to database: %v", err)
+		return
+	}
+
+	log.Printf("Event saved to database: ID=%d, Code=%v", eventLog.ID, evt.Code)
 }
 
 // InitServer 初始化服务器管理器
@@ -107,17 +134,26 @@ func InitServer() {
 	initOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		serverManager = &ServerManager{
-			eventChan: make(chan Event, 100), // 增加缓冲区大小
-			ctx:       ctx,
-			cancel:    cancel,
+			ctx:    ctx,
+			cancel: cancel,
 		}
+
+		// 加载现有应用
+		serverManager.loadExistingApplications()
+
+		// 初始化 maxEventID：从数据库获取当前最大事件ID
+		db := database.GetDB()
+		var maxID int64
+		if err := db.Model(&models.EventLog{}).Select("COALESCE(MAX(id), 0)").Scan(&maxID).Error; err != nil {
+			log.Printf("Warning: Failed to get max event ID, starting from 0: %v", err)
+			maxID = 0
+		}
+		serverManager.maxEventID = maxID
+		log.Printf("Initialized maxEventID: %d (will only process events with ID > %d)", maxID, maxID)
 
 		// 启动事件处理循环
 		serverManager.wg.Add(1)
 		go serverManager.eventLoop()
-
-		// 加载现有应用
-		serverManager.loadExistingApplications()
 
 		log.Println("ServerManager initialized successfully")
 	})
@@ -126,7 +162,11 @@ func InitServer() {
 // eventLoop 事件处理循环
 func (sm *ServerManager) eventLoop() {
 	defer sm.wg.Done()
-	log.Println("Event loop started")
+	log.Printf("Event loop started, maxEventID initialized to: %d", sm.maxEventID)
+
+	// 定时轮询间隔
+	ticker := time.NewTicker(1000 * time.Millisecond)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -134,8 +174,68 @@ func (sm *ServerManager) eventLoop() {
 			log.Println("Event loop shutting down...")
 			return
 
-		case evt := <-sm.eventChan:
-			sm.handleEvent(evt)
+		case <-ticker.C:
+			// 从数据库轮询未处理的事件
+			sm.pollAndProcessEvents()
+		}
+	}
+}
+
+// pollAndProcessEvents 轮询并处理事件
+func (sm *ServerManager) pollAndProcessEvents() {
+	db := database.GetDB()
+
+	// 查询 ID > maxEventID 且未处理的事件，按 ID 升序排列
+	var eventLogs []models.EventLog
+	if err := db.Where("id > ?", sm.maxEventID).
+		Order("id ASC").
+		Find(&eventLogs).Error; err != nil {
+		log.Printf("Error polling events: %v", err)
+		return
+	}
+
+	// 没有新事件
+	if len(eventLogs) == 0 {
+		return
+	}
+
+	log.Printf("Found %d new events to process", len(eventLogs))
+
+	// 处理每个事件
+	for i := range eventLogs {
+		eventLog := &eventLogs[i]
+
+		// 构造 Event 对象
+		evt := Event{
+			Code: EventCode(eventLog.EventCode),
+		}
+
+		// 反序列化 Interface JSON
+		if eventLog.InterfaceData != nil && *eventLog.InterfaceData != "" {
+			var iface models.Interface
+			if err := json.Unmarshal([]byte(*eventLog.InterfaceData), &iface); err != nil {
+				log.Printf("Error unmarshaling interface for event %d: %v", eventLog.ID, err)
+			} else {
+				evt.Interface = &iface
+			}
+		}
+
+		// 反序列化 Application JSON
+		if eventLog.ApplicationData != nil && *eventLog.ApplicationData != "" {
+			var app models.Application
+			if err := json.Unmarshal([]byte(*eventLog.ApplicationData), &app); err != nil {
+				log.Printf("Error unmarshaling application for event %d: %v", eventLog.ID, err)
+			} else {
+				evt.App = &app
+			}
+		}
+
+		// 处理事件
+		sm.handleEvent(evt)
+
+		// 更新 maxEventID
+		if eventLog.ID > sm.maxEventID {
+			sm.maxEventID = eventLog.ID
 		}
 	}
 }
