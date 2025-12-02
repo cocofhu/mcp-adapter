@@ -24,6 +24,9 @@ func (h HTTPSimpleAdapter) DoRequest(ctx context.Context, _ mcp.CallToolRequest,
 	if err != nil {
 		return nil, err
 	}
+	if request.Header.Get("Content-Type") == "" {
+		request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	}
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(request)
 	if err != nil {
