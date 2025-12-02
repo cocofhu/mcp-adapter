@@ -22,7 +22,7 @@ func ServeStreamable(c *gin.Context) {
 	path := c.Param("path")
 	impl := adapter.GetServerImpl(path, "streamable")
 	if impl == nil {
-		c.String(http.StatusNotFound, "sse path not found")
+		c.String(http.StatusNotFound, "streamable path not found")
 		return
 	}
 	// 复用底层 http.Handler
