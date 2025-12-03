@@ -28,7 +28,7 @@ docker-build:
       if [ -n "$CI_COMMIT_TAG" ]; then
         export VERSION="$CI_COMMIT_TAG"
       else
-        export VERSION="v1.4.0-${CI_COMMIT_SHORT_SHA}"
+        export VERSION="v1.4.1-${CI_COMMIT_SHORT_SHA}"
       fi
     # 设置镜像名称
     - export DOCKER_IMAGE_NAME="$DOCKER_REGISTRY/$PROJECT_NAME:$VERSION"

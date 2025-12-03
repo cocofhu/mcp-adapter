@@ -19,6 +19,9 @@ func buildMcpSchemaByField(fieldId int64) (map[string]any, error) {
 		if field.Type != "custom" {
 			schema["items"] = map[string]any{"type": field.Type}
 		} else {
+			if field.Ref == nil {
+				return nil, errors.New("custom type field is required")
+			}
 			typeSchema, err := buildMcpSchemaByType(*field.Ref)
 			if err != nil {
 				return nil, err
@@ -30,6 +33,9 @@ func buildMcpSchemaByField(fieldId int64) (map[string]any, error) {
 			schema["type"] = field.Type
 		} else {
 			schema["type"] = "object"
+			if field.Ref == nil {
+				return nil, errors.New("custom type field is required")
+			}
 			typeSchema, err := buildMcpSchemaByType(*field.Ref)
 			if err != nil {
 				return nil, err
@@ -126,6 +132,9 @@ func buildMcpSchemaByInterface(id int64, group string) (map[string]any, error) {
 				property["type"] = field.Type
 			} else {
 				property["type"] = "object"
+				if field.Ref == nil {
+					return nil, errors.New("custom type field is required")
+				}
 				typeSchema, err := buildMcpSchemaByType(*field.Ref)
 				if err != nil {
 					return nil, err

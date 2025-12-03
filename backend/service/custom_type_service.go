@@ -235,7 +235,10 @@ func CreateCustomType(req CreateCustomTypeRequest) (CustomTypeResponse, error) {
 	}
 	// 验证字段的 Ref 引用是否有效
 	for _, field := range req.Fields {
-		if field.Type == "custom" && field.Ref != nil {
+		if field.Type == "custom" {
+			if field.Ref == nil {
+				return CustomTypeResponse{}, errors.New("field reference must be provided for custom type field")
+			}
 			var refType models.CustomType
 			if err := db.First(&refType, *field.Ref).Error; err != nil {
 				return CustomTypeResponse{}, errors.New("invalid field reference: custom type not found")
