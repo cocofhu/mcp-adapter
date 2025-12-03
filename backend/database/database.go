@@ -41,7 +41,7 @@ func InitDatabase(dbPath string) {
 			DriverName: "sqlite", // 使用 modernc.org/sqlite 驱动
 			DSN:        dsn,
 		}, &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Info),
+			Logger: logger.Default.LogMode(logger.Warn),
 		})
 		if err != nil {
 			log.Fatal("Failed to connect to SQLite database:", err)

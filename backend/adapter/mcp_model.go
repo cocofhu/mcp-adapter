@@ -9,6 +9,7 @@ import (
 	"mcp-adapter/backend/models"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ type ServerManager struct {
 	wg         sync.WaitGroup     // 等待 goroutine 完成
 	mu         sync.RWMutex       // 保护并发操作
 	maxEventID int64              // 记录已处理的最大事件ID
+	handles    []RequestHandle    // 处理器列表
 }
 
 var serverManager *ServerManager
@@ -52,6 +54,21 @@ type Event struct {
 	Interface *models.Interface
 	App       *models.Application
 	Code      EventCode
+}
+
+type Parameters struct {
+	HeaderParams map[string]any
+	QueryParams  map[string]any
+	PathParams   map[string]any
+	BodyParams   map[string]any
+}
+
+type RequestMeta struct {
+	URL      string
+	Method   string
+	AuthType string
+	Protocol string
+	Ext      map[string]string
 }
 
 // AddCleanup 添加清理函数
@@ -134,9 +151,14 @@ func InitServer() {
 	initOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		serverManager = &ServerManager{
-			ctx:    ctx,
-			cancel: cancel,
+			ctx:     ctx,
+			cancel:  cancel,
+			handles: make([]RequestHandle, 0),
 		}
+
+		// 添加处理器
+		serverManager.handles = append(serverManager.handles, HTTPSimpleAdapter{})
+		serverManager.handles = append(serverManager.handles, HTTPCAPIAdapter{})
 
 		// 加载现有应用
 		serverManager.loadExistingApplications()
@@ -382,33 +404,40 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			shouldStructuredOutput = true
 		}
 
-		// 创建工具的副本以避免闭包捕获
-		ifaceCopy := *iface
 		// 创建参数副本，缓存参数信息避免在调用时查库
 		paramsCopy := make([]models.InterfaceParameter, len(params))
 		copy(paramsCopy, params)
 		// 创建 outputSchema 的副本
 		outputSchemaCopy := outputSchema
-
+		meta := RequestMeta{
+			URL:      iface.URL,
+			Method:   iface.Method,
+			AuthType: iface.AuthType,
+			Protocol: iface.Protocol,
+			Ext:      make(map[string]string),
+		}
 		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args := req.GetArguments()
-			// 应用默认值并验证参数
-			processedArgs, err := applyDefaultsAndValidate(args, paramsCopy)
+
+			finalParams, err := RearrangeParametersAndValidate(req.GetArguments(), paramsCopy)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			ext := make(map[string]string)
-			if iface.AuthType == "capi" {
-				ext["SecretId"] = req.Header.Get("TC-API-SecretId")
-				ext["SecretKey"] = req.Header.Get("TC-API-SecretKey")
+			var handle RequestHandle = nil
+			for _, h := range sm.handles {
+				if h.Compatible(meta) {
+					handle = h
+					break
+				}
 			}
-			data, code, err := CallHTTPInterfaceWithParams(ctx, &ifaceCopy, processedArgs, paramsCopy, ext)
+			if handle == nil {
+				return mcp.NewToolResultError(fmt.Sprintf("no compatible handle found for tool %s", iface.Name)), nil
+			}
+			data, err := handle.DoRequest(ctx, req, *finalParams, meta)
+
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			if code != http.StatusOK {
-				log.Printf("Error calling tool %s, code: %d", ifaceCopy.Name, code)
-			}
+
 			if shouldStructuredOutput {
 				out, _, err := parseStructuredOutput(data, outputSchemaCopy)
 				if err != nil {
@@ -563,55 +592,81 @@ func filterValueBySchema(value any, schema any) any {
 	}
 }
 
-// applyDefaultsAndValidate 应用默认值并验证参数
-func applyDefaultsAndValidate(args map[string]any, params []models.InterfaceParameter) (map[string]any, error) {
-	processedArgs := make(map[string]any)
+// RearrangeParametersAndValidate 应用默认值并验证参数
+func RearrangeParametersAndValidate(rawParams map[string]any, params []models.InterfaceParameter) (*Parameters, error) {
 
-	// 首先复制所有提供的参数
-	for k, v := range args {
-		processedArgs[k] = v
-	}
-
-	// 构建输入参数索引（只处理 input 组的参数）
-	inputParams := make(map[string]models.InterfaceParameter)
-	for _, p := range params {
-		if p.Group == "input" {
-			inputParams[p.Name] = p
+	headerParams := make(map[string]any)
+	bodyParams := make(map[string]any)
+	queryParams := make(map[string]any)
+	pathParams := make(map[string]any)
+	setVal := func(p models.InterfaceParameter, val any) {
+		switch strings.ToLower(p.Location) {
+		case "query":
+			queryParams[p.Name] = val
+		case "header":
+			headerParams[p.Name] = val
+		case "path":
+			pathParams[p.Name] = val
+		default: // body
+			bodyParams[p.Name] = val
 		}
 	}
 
-	// 应用默认值并验证（只对 input 参数）
+	// 先处理input组的参数
 	for _, p := range params {
 		// 只处理 input 组的参数
 		if p.Group != "input" {
 			continue
 		}
-
-		_, provided := processedArgs[p.Name]
+		param, provided := rawParams[p.Name]
+		// 如果参数已提供，应用提供的值
+		if provided {
+			setVal(p, param)
+			continue
+		}
 		// 如果参数未提供且有默认值，应用默认值
-		if !provided && p.DefaultValue != nil && *p.DefaultValue != "" {
+		if p.DefaultValue != nil && *p.DefaultValue != "" {
 			// 根据参数类型转换默认值
-			convertedVal, err := convertDefaultValue(*p.DefaultValue, p.Type)
+			convertedVal, err := ConvertDefaultValue(*p.DefaultValue, p.Type)
 			if err != nil {
 				return nil, fmt.Errorf("failed to convert default value for parameter %s: %w", p.Name, err)
 			}
-			processedArgs[p.Name] = convertedVal
+			setVal(p, convertedVal)
 			log.Printf("Applied default value for input parameter %s: %v", p.Name, convertedVal)
+			continue
 		}
-		// 验证必填参数
+		// 参数未提供且没有默认值，如果参数是必需的，返回错误
 		if p.Required {
-			finalVal, exists := processedArgs[p.Name]
-			if !exists || finalVal == nil {
-				return nil, fmt.Errorf("missing required parameter: %s", p.Name)
-			}
+			return nil, fmt.Errorf("missing required parameter: %s", p.Name)
 		}
 	}
+	// fixed 组的参数最终覆盖上去
+	for _, p := range params {
+		if p.Group != "fixed" {
+			continue
+		}
+		if p.DefaultValue == nil || *p.DefaultValue == "" {
+			log.Printf("Warning: fixed parameter %s has no default value", p.Name)
+			continue
+		}
+		convertedVal, err := ConvertDefaultValue(*p.DefaultValue, p.Type)
+		if err != nil {
+			log.Printf("Warning: failed to convert fixed parameter %s: %v", p.Name, err)
+			continue
+		}
+		setVal(p, convertedVal)
+	}
 
-	return processedArgs, nil
+	return &Parameters{
+		HeaderParams: headerParams,
+		QueryParams:  queryParams,
+		PathParams:   pathParams,
+		BodyParams:   bodyParams,
+	}, nil
 }
 
-// convertDefaultValue 根据参数类型转换默认值字符串
-func convertDefaultValue(defaultValue string, paramType string) (any, error) {
+// ConvertDefaultValue 转换逻辑需要保持和MCP接口的一致, 这个接口暴露出去
+func ConvertDefaultValue(defaultValue string, paramType string) (any, error) {
 	switch paramType {
 	case "number":
 		// 尝试转换为 float64

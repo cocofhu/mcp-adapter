@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"log"
 	"mcp-adapter/backend/adapter"
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
@@ -23,7 +24,8 @@ type CreateApplicationRequest struct {
 }
 
 type GetApplicationRequest struct {
-	ID int64 `json:"id" validate:"required,gt=0"`
+	ID         int64 `json:"id" validate:"required,gt=0"`
+	ShowDetail bool  `json:"show_detail,omitempty"`
 }
 
 type ListApplicationsRequest struct{}
@@ -54,6 +56,26 @@ type ApplicationDTO struct {
 	Enabled     bool      `json:"enabled"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type FixedInputDTO struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	Location    string `json:"location"`
+	Value       any    `json:"value"`
+}
+
+type MCPToolDefinitionDTO struct {
+	Name        string          `json:"name"`
+	FixedInput  []FixedInputDTO `json:"fixed_input"`
+	InputSchema map[string]any  `json:"input_schema"`
+	Interfaces  InterfaceDTO    `json:"interfaces"`
+}
+
+type ApplicationDetailResponse struct {
+	Application     ApplicationDTO         `json:"application"`
+	ToolDefinitions []MCPToolDefinitionDTO `json:"tool_definitions"`
 }
 
 type ApplicationResponse struct {
@@ -121,16 +143,58 @@ func CreateApplication(req CreateApplicationRequest) (ApplicationResponse, error
 }
 
 // GetApplication 获取单个应用
-func GetApplication(req GetApplicationRequest) (ApplicationResponse, error) {
+func GetApplication(req GetApplicationRequest) (ApplicationDetailResponse, error) {
 	if err := validate.Struct(req); err != nil {
-		return ApplicationResponse{}, err
+		return ApplicationDetailResponse{}, err
 	}
 	db := database.GetDB()
 	var app models.Application
 	if err := db.First(&app, req.ID).Error; err != nil {
-		return ApplicationResponse{}, errors.New("no such application")
+		return ApplicationDetailResponse{}, errors.New("no such application")
 	}
-	return ApplicationResponse{Application: toApplicationDTO(app)}, nil
+	if !req.ShowDetail {
+		return ApplicationDetailResponse{Application: toApplicationDTO(app)}, nil
+	}
+	interfaces, err := ListInterfaces(ListInterfacesRequest{AppID: app.ID})
+	if err != nil {
+		return ApplicationDetailResponse{}, err
+	}
+	toolDefinitions := make([]MCPToolDefinitionDTO, 0)
+	for _, iface := range interfaces.Interfaces {
+		inputSchema, err := adapter.BuildMcpInputSchemaByInterface(iface.ID)
+		if err != nil {
+			return ApplicationDetailResponse{}, err
+		}
+		fixedInputs := make([]FixedInputDTO, 0)
+		for _, param := range iface.Parameters {
+			if param.Group != "fixed" {
+				continue
+			}
+			if param.DefaultValue == nil {
+				log.Printf("Warning: interface %s has a fixed input %s without default value", iface.Name, param.Name)
+				continue
+			}
+			value, err := adapter.ConvertDefaultValue(*param.DefaultValue, param.Type)
+			if err != nil {
+				log.Printf("Warning: failed to convert default value for parameter %s: %v", param.Name, err)
+				continue
+			}
+			fixedInputs = append(fixedInputs, FixedInputDTO{
+				Name:        param.Name,
+				Value:       value,
+				Type:        param.Type,
+				Description: param.Description,
+				Location:    param.Location,
+			})
+		}
+		toolDefinitions = append(toolDefinitions, MCPToolDefinitionDTO{
+			Name:        iface.Name,
+			FixedInput:  fixedInputs,
+			InputSchema: inputSchema,
+			Interfaces:  iface,
+		})
+	}
+	return ApplicationDetailResponse{Application: toApplicationDTO(app), ToolDefinitions: toolDefinitions}, nil
 }
 
 // ListApplications 获取应用列表

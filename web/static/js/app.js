@@ -223,6 +223,9 @@ function renderApplications(apps) {
                 <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); manageApplicationInterfaces(${app.id})" title="管理此应用的接口">
                     <i class="fas fa-plug"></i> 接口
                 </button>
+                <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); viewApplicationJSON(${app.id})" title="查看应用 JSON 数据">
+                    <i class="fas fa-code"></i> JSON
+                </button>
                 <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); editApplication(${app.id})" title="编辑应用信息">
                     <i class="fas fa-edit"></i> 编辑
                 </button>
@@ -390,6 +393,82 @@ function viewApplicationEndpoint(id) {
     }
     
     showModal(`${app.name} - 接口信息`, endpointInfo, null, false);
+}
+
+// 查看应用 JSON 数据
+async function viewApplicationJSON(id) {
+    try {
+        const data = await apiRequest(`/applications-detail/${id}`);
+        if (!data) return;
+        
+        const jsonString = JSON.stringify(data, null, 2);
+        const jsonId = 'app-json-' + id;
+        
+        // 统计工具定义数量
+        const toolCount = data.tool_definitions ? data.tool_definitions.length : 0;
+        const appName = data.application ? data.application.name : '应用';
+        
+        const jsonContent = `
+            <div class="doc-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h3 style="margin: 0;">应用详细信息 (包含 ${toolCount} 个工具定义)</h3>
+                    <button class="btn btn-sm btn-primary" onclick="copyToClipboard('${jsonId}')" title="复制 JSON">
+                        <i class="fas fa-copy"></i> 复制
+                    </button>
+                </div>
+                <pre style="background: #f5f5f5; padding: 16px; border-radius: 4px; max-height: 500px; overflow: auto; user-select: text;"><code id="${jsonId}" style="user-select: text;">${escapeHtml(jsonString)}</code></pre>
+                <p class="text-muted" style="margin-top: 12px;">
+                    <i class="fas fa-info-circle"></i> 这是从 GetApplication 接口返回的完整 JSON 数据，包含应用信息和工具定义 (ToolDefinitions)。
+                </p>
+            </div>
+        `;
+        
+        showModal(`${appName} - JSON 数据`, jsonContent, null, false);
+    } catch (error) {
+        showToast('获取应用数据失败: ' + error.message, 'error');
+    }
+}
+
+// 复制到剪贴板
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    
+    const text = element.textContent;
+    
+    // 使用现代 Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('已复制到剪贴板', 'success');
+        }).catch(err => {
+            // 降级到旧方法
+            fallbackCopyToClipboard(text);
+        });
+    } else {
+        // 降级到旧方法
+        fallbackCopyToClipboard(text);
+    }
+}
+
+// 降级复制方法
+function fallbackCopyToClipboard(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+        document.execCommand('copy');
+        showToast('已复制到剪贴板', 'success');
+    } catch (err) {
+        showToast('复制失败，请手动复制', 'error');
+    }
+    
+    document.body.removeChild(textArea);
 }
 
 function editApplication(id) {

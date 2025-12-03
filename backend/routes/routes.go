@@ -26,6 +26,7 @@ func SetupRoutes() *gin.Engine {
 		api.GET("/applications/:id", handlers.GetApplication)
 		api.PUT("/applications/:id", handlers.UpdateApplication)
 		api.DELETE("/applications/:id", handlers.DeleteApplication)
+		api.GET("/applications-detail/:id", handlers.GetApplicationDetail)
 
 		// 接口相关路由
 		api.POST("/interfaces", handlers.CreateInterface)
