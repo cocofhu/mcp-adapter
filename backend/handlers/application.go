@@ -45,7 +45,7 @@ func GetApplication(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, resp.Application)
+	c.JSON(http.StatusOK, resp)
 }
 
 // UpdateApplication 更新应用（部分字段）

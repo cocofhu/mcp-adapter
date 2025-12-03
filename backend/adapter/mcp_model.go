@@ -627,7 +627,7 @@ func RearrangeParametersAndValidate(rawParams map[string]any, params []models.In
 		// 如果参数未提供且有默认值，应用默认值
 		if p.DefaultValue != nil && *p.DefaultValue != "" {
 			// 根据参数类型转换默认值
-			convertedVal, err := convertDefaultValue(*p.DefaultValue, p.Type)
+			convertedVal, err := ConvertDefaultValue(*p.DefaultValue, p.Type)
 			if err != nil {
 				return nil, fmt.Errorf("failed to convert default value for parameter %s: %w", p.Name, err)
 			}
@@ -649,7 +649,7 @@ func RearrangeParametersAndValidate(rawParams map[string]any, params []models.In
 			log.Printf("Warning: fixed parameter %s has no default value", p.Name)
 			continue
 		}
-		convertedVal, err := convertDefaultValue(*p.DefaultValue, p.Type)
+		convertedVal, err := ConvertDefaultValue(*p.DefaultValue, p.Type)
 		if err != nil {
 			log.Printf("Warning: failed to convert fixed parameter %s: %v", p.Name, err)
 			continue
@@ -665,8 +665,8 @@ func RearrangeParametersAndValidate(rawParams map[string]any, params []models.In
 	}, nil
 }
 
-// convertDefaultValue 根据参数类型转换默认值字符串
-func convertDefaultValue(defaultValue string, paramType string) (any, error) {
+// ConvertDefaultValue 转换逻辑需要保持和MCP接口的一致, 这个接口暴露出去
+func ConvertDefaultValue(defaultValue string, paramType string) (any, error) {
 	switch paramType {
 	case "number":
 		// 尝试转换为 float64
