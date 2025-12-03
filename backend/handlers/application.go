@@ -33,6 +33,21 @@ func GetApplications(c *gin.Context) {
 	c.JSON(http.StatusOK, resp.Applications)
 }
 
+// GetApplicationDetail 获取单个应用详情 这个接口不要暴露MCP比较好
+func GetApplicationDetail(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid application ID")
+		return
+	}
+	resp, err := service.GetApplication(service.GetApplicationRequest{ID: id, ShowDetail: true})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 // GetApplication 获取单个应用
 func GetApplication(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -45,7 +60,7 @@ func GetApplication(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, resp.Application)
 }
 
 // UpdateApplication 更新应用（部分字段）

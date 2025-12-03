@@ -24,7 +24,8 @@ type CreateApplicationRequest struct {
 }
 
 type GetApplicationRequest struct {
-	ID int64 `json:"id" validate:"required,gt=0"`
+	ID         int64 `json:"id" validate:"required,gt=0"`
+	ShowDetail bool  `json:"show_detail,omitempty"`
 }
 
 type ListApplicationsRequest struct{}
@@ -150,6 +151,9 @@ func GetApplication(req GetApplicationRequest) (ApplicationDetailResponse, error
 	var app models.Application
 	if err := db.First(&app, req.ID).Error; err != nil {
 		return ApplicationDetailResponse{}, errors.New("no such application")
+	}
+	if !req.ShowDetail {
+		return ApplicationDetailResponse{Application: toApplicationDTO(app)}, nil
 	}
 	interfaces, err := ListInterfaces(ListInterfacesRequest{AppID: app.ID})
 	if err != nil {

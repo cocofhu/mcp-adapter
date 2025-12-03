@@ -398,7 +398,7 @@ function viewApplicationEndpoint(id) {
 // 查看应用 JSON 数据
 async function viewApplicationJSON(id) {
     try {
-        const data = await apiRequest(`/applications/${id}`);
+        const data = await apiRequest(`/applications-detail/${id}`);
         if (!data) return;
         
         const jsonString = JSON.stringify(data, null, 2);
