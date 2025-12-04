@@ -16,11 +16,11 @@ variables:
 
 # 测试阶段
 test:unit:
-  image: golang:1.21
+  image: golang:1.22
   stage: test
   before_script:
-    - cd backend
     - go mod download
+    - go install github.com/boumenot/gocover-cobertura@latest
   script:
     # 运行单元测试并生成覆盖率报告
     - go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -28,15 +28,18 @@ test:unit:
     - go tool cover -func=coverage.out
     # 生成 HTML 覆盖率报告
     - go tool cover -html=coverage.out -o coverage.html
+    # 生成 Cobertura 格式的覆盖率报告
+    - gocover-cobertura < coverage.out > coverage.xml
   coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
   artifacts:
     reports:
       coverage_report:
         coverage_format: cobertura
-        path: backend/coverage.xml
+        path: coverage.xml
     paths:
-      - backend/coverage.out
-      - backend/coverage.html
+      - coverage.out
+      - coverage.html
+      - coverage.xml
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH
@@ -46,8 +49,6 @@ test:unit:
 test:lint:
   image: golangci/golangci-lint:v1.55
   stage: test
-  before_script:
-    - cd backend
   script:
     # 运行 golangci-lint 进行代码质量检查
     - golangci-lint run --timeout 5m --out-format colored-line-number ./...
@@ -60,15 +61,13 @@ test:lint:
 test:security:
   image: securego/gosec:latest
   stage: test
-  before_script:
-    - cd backend
   script:
     # 运行 gosec 进行安全漏洞扫描
     - gosec -fmt json -out gosec-report.json ./... || true
     - gosec ./...
   artifacts:
     paths:
-      - backend/gosec-report.json
+      - gosec-report.json
     expire_in: 30 days
   allow_failure: true
   rules:
@@ -77,10 +76,9 @@ test:security:
 
 # 依赖检查
 test:dependencies:
-  image: golang:1.21
+  image: golang:1.22
   stage: test
   before_script:
-    - cd backend
     - go install golang.org/x/vuln/cmd/govulncheck@latest
   script:
     # 检查依赖的已知漏洞
