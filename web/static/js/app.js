@@ -989,6 +989,7 @@ async function showInterfaceForm(interfaceId = null) {
             document.getElementById('interface-protocol').value = iface.protocol;
             document.getElementById('interface-url').value = iface.url;
             document.getElementById('interface-auth').value = iface.auth_type;
+            document.getElementById('interface-post-process').value = iface.post_process || '';
             
             // 加载参数，根据 group 分配到不同Tab
             if (iface.parameters && iface.parameters.length > 0) {
@@ -1007,6 +1008,7 @@ async function showInterfaceForm(interfaceId = null) {
         document.getElementById('interface-protocol').value = 'http';
         document.getElementById('interface-url').value = '';
         document.getElementById('interface-auth').value = 'none';
+        document.getElementById('interface-post-process').value = '';
     }
 }
 
@@ -1035,6 +1037,7 @@ document.getElementById('interface-form-submit').addEventListener('click', async
     const protocol = document.getElementById('interface-protocol').value;
     const url = document.getElementById('interface-url').value;
     const auth_type = document.getElementById('interface-auth').value;
+    const post_process = document.getElementById('interface-post-process').value;
     
     if (!name || !url) {
         showToast('请填写必填字段', 'error');
@@ -1081,6 +1084,7 @@ document.getElementById('interface-form-submit').addEventListener('click', async
                     protocol,
                     url,
                     auth_type,
+                    post_process,
                     parameters
                 })
             });
@@ -1098,6 +1102,7 @@ document.getElementById('interface-form-submit').addEventListener('click', async
                     url,
                     auth_type,
                     enabled: true,
+                    post_process,
                     parameters
                 })
             });
