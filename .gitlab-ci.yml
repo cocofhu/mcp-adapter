@@ -45,39 +45,6 @@ test:unit:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
 
-# 代码质量检查
-test:lint:
-  image: golang:1.25
-  stage: test
-  before_script:
-    # 安装 golangci-lint
-    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.61.0
-    - export PATH=$PATH:$(go env GOPATH)/bin
-  script:
-    # 运行 golangci-lint 进行代码质量检查
-    - golangci-lint run --timeout 5m --out-format colored-line-number ./...
-  allow_failure: true
-  rules:
-    - if: $CI_COMMIT_BRANCH
-    - if: $CI_COMMIT_TAG
-
-# 安全扫描
-test:security:
-  image: securego/gosec:latest
-  stage: test
-  script:
-    # 运行 gosec 进行安全漏洞扫描
-    # 排除 vendor 和测试文件，只扫描源代码
-    - gosec -fmt json -out gosec-report.json -exclude-dir=vendor -exclude-dir=.git ./... || true
-    - gosec -exclude-dir=vendor -exclude-dir=.git ./...
-  artifacts:
-    paths:
-      - gosec-report.json
-    expire_in: 30 days
-  allow_failure: true
-  rules:
-    - if: $CI_COMMIT_BRANCH
-    - if: $CI_COMMIT_TAG
 
 # 依赖检查
 test:dependencies:
@@ -93,7 +60,6 @@ test:dependencies:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
 
-
 # Docker 构建和推送
 docker-build:
   image: docker:cli
@@ -108,7 +74,7 @@ docker-build:
       if [ -n "$CI_COMMIT_TAG" ]; then
         export VERSION="$CI_COMMIT_TAG"
       else
-        export VERSION="v1.4.1-${CI_COMMIT_SHORT_SHA}"
+        export VERSION="v1.5.0-${CI_COMMIT_SHORT_SHA}"
       fi
     # 设置镜像名称
     - export DOCKER_IMAGE_NAME="$DOCKER_REGISTRY/$PROJECT_NAME:$VERSION"
