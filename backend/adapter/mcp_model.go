@@ -8,7 +8,6 @@ import (
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"net/http"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -437,7 +436,6 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			Protocol: iface.Protocol,
 			Ext:      make(map[string]string),
 		}
-
 		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 
 			if ok := SatisfySchema(inputSchemaCopy, req.GetArguments()); !ok {
@@ -476,7 +474,7 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 
 			if postProcessMeta.StructuredOutput {
 				// 解析 JSON 数据
-				var result map[string]any
+				var result any
 				if err := json.Unmarshal(data, &result); err != nil {
 					return mcp.NewToolResultError(fmt.Sprintf("failed to parse JSON: %v", err)), nil
 				}
@@ -502,90 +500,93 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 	return fmt.Errorf("application %s not found for tool %s", app.Name, iface.Name)
 }
 
-// truncateByPath 递归处理，支持 map、slice 的通配符 *
-func truncateByPath(v any, path []string, length int) {
+func truncateByPath(data any, path []string, length int) any {
 	if len(path) == 0 {
-		return
+		return data
 	}
-
-	rv := reflect.ValueOf(v)
-
-	switch rv.Kind() {
-	case reflect.Map:
-		// map 类型
+	// 处理 map 类型
+	if m, ok := data.(map[string]any); ok {
+		result := make(map[string]any)
 		if path[0] == "*" {
-			// 通配符：遍历所有 key
-			for _, key := range rv.MapKeys() {
-				val := rv.MapIndex(key)
+			// 通配符：处理所有 key
+			for k, v := range m {
 				if len(path) == 1 {
-					// 最后一层
-					if val.Kind() == reflect.String {
-						strVal := val.String()
-						if len(strVal) > length {
-							rv.SetMapIndex(key, reflect.ValueOf(strVal[:length]))
-						}
+					// 最后一层，截断字符串
+					if str, ok := v.(string); ok && len(str) > length {
+						result[k] = str[:length]
+					} else {
+						result[k] = v
 					}
 				} else {
-					truncateByPath(val.Interface(), path[1:], length)
+					// 继续递归
+					result[k] = truncateByPath(v, path[1:], length)
 				}
 			}
 		} else {
 			// 指定 key
-			key := reflect.ValueOf(path[0])
-			val := rv.MapIndex(key)
-			if !val.IsValid() {
-				return
-			}
-			if len(path) == 1 {
-				if val.Kind() == reflect.String {
-					strVal := val.String()
-					if len(strVal) > length {
-						rv.SetMapIndex(key, reflect.ValueOf(strVal[:length]))
-					}
-				}
-			} else {
-				truncateByPath(val.Interface(), path[1:], length)
-			}
-		}
-
-	case reflect.Slice:
-		// slice 类型
-		if path[0] == "*" {
-			// 遍历所有元素
-			for i := 0; i < rv.Len(); i++ {
-				elem := rv.Index(i)
-				if len(path) == 1 {
-					if elem.Kind() == reflect.String {
-						strVal := elem.String()
-						if len(strVal) > length {
-							elem.Set(reflect.ValueOf(strVal[:length]))
+			targetKey := path[0]
+			for k, v := range m {
+				if k == targetKey {
+					if len(path) == 1 {
+						// 最后一层，截断字符串
+						if str, ok := v.(string); ok && len(str) > length {
+							result[k] = str[:length]
+						} else {
+							result[k] = v
 						}
+					} else {
+						// 继续递归
+						result[k] = truncateByPath(v, path[1:], length)
 					}
 				} else {
-					truncateByPath(elem.Interface(), path[1:], length)
+					result[k] = v
+				}
+			}
+		}
+		return result
+	}
+
+	// 处理 slice 类型
+	if arr, ok := data.([]any); ok {
+		result := make([]any, len(arr))
+		if path[0] == "*" {
+			for i, v := range arr {
+				if len(path) == 1 {
+					if str, ok := v.(string); ok && len(str) > length {
+						result[i] = str[:length]
+					} else {
+						result[i] = v
+					}
+				} else {
+					result[i] = truncateByPath(v, path[1:], length)
 				}
 			}
 		} else {
-			// 指定索引
 			index, err := strconv.Atoi(path[0])
-			if err != nil || index < 0 || index >= rv.Len() {
-				return
-			}
-			elem := rv.Index(index)
-			if len(path) == 1 {
-				if elem.Kind() == reflect.String {
-					strVal := elem.String()
-					if len(strVal) > length {
-						elem.Set(reflect.ValueOf(strVal[:length]))
+			if err == nil && index >= 0 && index < len(arr) {
+				for i, v := range arr {
+					if i == index {
+						if len(path) == 1 {
+							if str, ok := v.(string); ok && len(str) > length {
+								result[i] = str[:length]
+							} else {
+								result[i] = v
+							}
+						} else {
+							result[i] = truncateByPath(v, path[1:], length)
+						}
+					} else {
+						result[i] = v
 					}
 				}
 			} else {
-				truncateByPath(elem.Interface(), path[1:], length)
+				copy(result, arr)
 			}
 		}
-	default:
-		return
+		return result
 	}
+	// 其他类型直接返回
+	return data
 }
 
 func truncate(key string, length int, data []byte) ([]byte, error) {
@@ -593,10 +594,8 @@ func truncate(key string, length int, data []byte) ([]byte, error) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		return data, fmt.Errorf("failed to parse JSON: %v", err)
 	}
-
 	keys := strings.Split(key, ".")
-	truncateByPath(result, keys, length)
-
+	result = truncateByPath(result, keys, length)
 	newData, err := json.Marshal(result)
 	if err != nil {
 		return data, fmt.Errorf("failed to marshal JSON: %v", err)

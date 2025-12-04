@@ -243,11 +243,11 @@ func (sb *schemaBuilder) buildParameterTypeSchema(param *models.InterfaceParamet
 	return sb.buildSchemaByType(*param.Ref)
 }
 
-func SatisfySchema(schema map[string]any, data map[string]any) bool {
+func SatisfySchema(schema map[string]any, data any) bool {
 	if schema == nil {
 		return true
 	}
-	if data == nil {
+	if isNil(data) {
 		data = make(map[string]any)
 	}
 	var dfs func(schema, data any, depth int) int
@@ -259,13 +259,13 @@ func SatisfySchema(schema map[string]any, data map[string]any) bool {
 			return validationSchemaNotExist
 		}
 
-		if schema == nil && data == nil {
+		if isNil(schema) && isNil(data) {
 			return validationMatched
 		}
-		if schema != nil && data == nil {
+		if !isNil(schema) && isNil(data) {
 			return validationDataNotExist
 		}
-		if schema == nil && data != nil {
+		if isNil(schema) && !isNil(data) {
 			return validationSchemaNotExist
 		}
 
@@ -287,7 +287,6 @@ func SatisfySchema(schema map[string]any, data map[string]any) bool {
 			return validationMatched
 
 		case "number":
-			// 支持JSON unmarshaling产生的数字类型
 			switch data.(type) {
 			case float64, float32, int, int64, int32, int16, int8, uint, uint64, uint32, uint16, uint8:
 				return validationMatched
@@ -348,7 +347,6 @@ func SatisfySchema(schema map[string]any, data map[string]any) bool {
 					requiredMap[req] = true
 				}
 			}
-			log.Printf("requiredMap: %+v", requiredMap)
 			// 首先检查所有必填字段是否存在
 			for requiredKey := range requiredMap {
 				mapKey := reflect.ValueOf(requiredKey)
@@ -407,18 +405,18 @@ func SatisfySchema(schema map[string]any, data map[string]any) bool {
 	return result == validationMatched
 }
 
-func FilterDataBySchema(schema map[string]any, data map[string]any) any {
+func FilterDataBySchema(schema map[string]any, data any) any {
 	if schema == nil {
 		return data
 	}
-	if data == nil {
+	if isNil(data) {
 		return nil
 	}
 
 	// 递归过滤函数
 	var filter func(schema, data any) any
 	filter = func(schema, data any) any {
-		if schema == nil || data == nil {
+		if isNil(schema) || isNil(data) {
 			return data
 		}
 
@@ -492,7 +490,7 @@ func FilterDataBySchema(schema map[string]any, data map[string]any) any {
 				if mapValue.IsValid() {
 					value := mapValue.Interface()
 					t := filter(propSchema, value)
-					if t != nil {
+					if !isNil(t) {
 						filtered[key] = t
 					}
 				}
@@ -504,4 +502,19 @@ func FilterDataBySchema(schema map[string]any, data map[string]any) any {
 	}
 
 	return filter(schema, data)
+}
+
+func isNil(data any) bool {
+	if data == nil {
+		return true
+	}
+	v := reflect.ValueOf(data)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func,
+		reflect.Map, reflect.Ptr, reflect.Interface, reflect.Slice:
+		return v.IsNil()
+	default:
+		// default case, not a nil-able type
+	}
+	return false
 }

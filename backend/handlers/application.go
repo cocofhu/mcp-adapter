@@ -30,7 +30,7 @@ func GetApplications(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Failed to fetch applications")
 		return
 	}
-	c.JSON(http.StatusOK, resp.Applications)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetApplicationDetail 获取单个应用详情 这个接口不要暴露MCP比较好

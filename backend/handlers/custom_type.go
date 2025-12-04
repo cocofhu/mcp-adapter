@@ -35,7 +35,7 @@ func GetCustomTypes(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, resp.CustomTypes)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetCustomType 获取单个自定义类型
