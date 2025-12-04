@@ -1324,6 +1324,19 @@ function addParamRow(paramData = null) {
         </div>
     `;
 
+    // Output 参数不显示 location 选择器
+    const showLocation = (group !== 'output');
+    const locationHTML = showLocation ? `
+        <select class="param-location-select">
+            <option value="query" ${paramData && paramData.location === 'query' ? 'selected' : ''}>query</option>
+            <option value="header" ${paramData && paramData.location === 'header' ? 'selected' : ''}>header</option>
+            <option value="body" ${paramData && paramData.location === 'body' ? 'selected' : ''}>body</option>
+            <option value="path" ${paramData && paramData.location === 'path' ? 'selected' : ''}>path</option>
+        </select>
+    ` : `
+        <input type="hidden" class="param-location-select" value="${paramData && paramData.location ? paramData.location : 'body'}">
+    `;
+
     row.innerHTML = `
         <div class="form-row">
             <input type="text" class="param-name-input" placeholder="参数名" value="${paramData ? paramData.name : ''}">
@@ -1332,12 +1345,7 @@ function addParamRow(paramData = null) {
             </select>
             <input type="hidden" class="param-ref-input" value="${paramData && paramData.ref ? paramData.ref : ''}">
             <input type="hidden" class="param-group-input" value="${group}">
-            <select class="param-location-select">
-                <option value="query" ${paramData && paramData.location === 'query' ? 'selected' : ''}>query</option>
-                <option value="header" ${paramData && paramData.location === 'header' ? 'selected' : ''}>header</option>
-                <option value="body" ${paramData && paramData.location === 'body' ? 'selected' : ''}>body</option>
-                <option value="path" ${paramData && paramData.location === 'path' ? 'selected' : ''}>path</option>
-            </select>
+            ${locationHTML}
             <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                 <input type="checkbox" class="param-array-checkbox" ${paramData && paramData.is_array ? 'checked' : ''} ${group === 'fixed' ? 'disabled' : ''} onchange="handleParamArrayChange(this)">
                 数组
