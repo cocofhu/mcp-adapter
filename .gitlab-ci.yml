@@ -16,7 +16,7 @@ variables:
 
 # 测试阶段
 test:unit:
-  image: golang:1.22
+  image: golang:1.25
   stage: test
   before_script:
     - go mod download
@@ -76,7 +76,7 @@ test:security:
 
 # 依赖检查
 test:dependencies:
-  image: golang:1.22
+  image: golang:1.25
   stage: test
   before_script:
     - go install golang.org/x/vuln/cmd/govulncheck@latest
