@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"mcp-adapter/backend/adapter"
@@ -67,10 +68,11 @@ type FixedInputDTO struct {
 }
 
 type MCPToolDefinitionDTO struct {
-	Name         string          `json:"name"`
-	FixedInput   []FixedInputDTO `json:"fixed_input"`
-	InputSchema  map[string]any  `json:"input_schema"`
-	OutputSchema map[string]any  `json:"output_schema"`
+	Name         string                  `json:"name"`
+	FixedInput   []FixedInputDTO         `json:"fixed_input"`
+	InputSchema  map[string]any          `json:"input_schema"`
+	OutputSchema map[string]any          `json:"output_schema"`
+	PostProcess  adapter.PostProcessMeta `json:"post_process"`
 }
 
 type ApplicationDetailResponse struct {
@@ -191,11 +193,23 @@ func GetApplication(req GetApplicationRequest) (ApplicationDetailResponse, error
 				Location:    param.Location,
 			})
 		}
+		postProcessMeta := adapter.PostProcessMeta{
+			TruncateFields:   make(map[string]int),
+			StructuredOutput: false,
+		}
+		if iface.PostProcess != "" {
+			if err := json.Unmarshal([]byte(iface.PostProcess), &postProcessMeta); err != nil {
+				log.Printf("Error unmarshalling post process meta: %v, tool id %d", err, iface.ID)
+			}
+			log.Printf("Post process meta for tool %s: %+v", iface.Name, postProcessMeta)
+		}
+
 		toolDefinitions = append(toolDefinitions, MCPToolDefinitionDTO{
 			Name:         iface.Name,
 			FixedInput:   fixedInputs,
 			InputSchema:  inputSchema,
 			OutputSchema: outputSchema,
+			PostProcess:  postProcessMeta,
 		})
 	}
 	return ApplicationDetailResponse{Application: toApplicationDTO(app), ToolDefinitions: toolDefinitions}, nil
