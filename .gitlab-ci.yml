@@ -1,4 +1,5 @@
 stages:
+  - test
   - build
   
 variables:
@@ -12,6 +13,82 @@ variables:
   # 项目配置
   PROJECT_NAME: mcp-adapter
   DOCKER_IMAGE_PATH: cocofhu/mcp-adapter
+
+# 测试阶段
+test:unit:
+  image: golang:1.21
+  stage: test
+  before_script:
+    - cd backend
+    - go mod download
+  script:
+    # 运行单元测试并生成覆盖率报告
+    - go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+    # 显示覆盖率统计
+    - go tool cover -func=coverage.out
+    # 生成 HTML 覆盖率报告
+    - go tool cover -html=coverage.out -o coverage.html
+  coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: backend/coverage.xml
+    paths:
+      - backend/coverage.out
+      - backend/coverage.html
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# 代码质量检查
+test:lint:
+  image: golangci/golangci-lint:v1.55
+  stage: test
+  before_script:
+    - cd backend
+  script:
+    # 运行 golangci-lint 进行代码质量检查
+    - golangci-lint run --timeout 5m --out-format colored-line-number ./...
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# 安全扫描
+test:security:
+  image: securego/gosec:latest
+  stage: test
+  before_script:
+    - cd backend
+  script:
+    # 运行 gosec 进行安全漏洞扫描
+    - gosec -fmt json -out gosec-report.json ./... || true
+    - gosec ./...
+  artifacts:
+    paths:
+      - backend/gosec-report.json
+    expire_in: 30 days
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# 依赖检查
+test:dependencies:
+  image: golang:1.21
+  stage: test
+  before_script:
+    - cd backend
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+  script:
+    # 检查依赖的已知漏洞
+    - govulncheck ./...
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 
 # Docker 构建和推送

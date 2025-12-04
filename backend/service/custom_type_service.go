@@ -379,7 +379,10 @@ func UpdateCustomType(req UpdateCustomTypeRequest) (CustomTypeResponse, error) {
 	if req.Fields != nil {
 		// 验证字段的 Ref 引用
 		for _, fieldReq := range *req.Fields {
-			if fieldReq.Type == "custom" && fieldReq.Ref != nil {
+			if fieldReq.Type == "custom" {
+				if fieldReq.Ref == nil {
+					return CustomTypeResponse{}, errors.New("field reference must be provided for custom type field")
+				}
 				var refType models.CustomType
 				if err := tx.First(&refType, *fieldReq.Ref).Error; err != nil {
 					tx.Rollback()

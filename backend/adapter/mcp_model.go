@@ -402,6 +402,7 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			}
 			newTool.RawOutputSchema = marshal
 			shouldStructuredOutput = true
+			log.Printf("Output schema for tool %s: %s", iface.Name, string(marshal))
 		}
 
 		// 创建参数副本，缓存参数信息避免在调用时查库
@@ -409,6 +410,7 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 		copy(paramsCopy, params)
 		// 创建 outputSchema 的副本
 		outputSchemaCopy := outputSchema
+		inputSchemaCopy := schema
 		meta := RequestMeta{
 			URL:      iface.URL,
 			Method:   iface.Method,
@@ -418,10 +420,15 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 		}
 		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 
+			if ok := SatisfySchema(inputSchemaCopy, req.GetArguments()); !ok {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid input schema: %v", err)), nil
+			}
+
 			finalParams, err := RearrangeParametersAndValidate(req.GetArguments(), paramsCopy)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
+
 			var handle RequestHandle = nil
 			for _, h := range sm.handles {
 				if h.Compatible(meta) {
@@ -439,11 +446,19 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			}
 
 			if shouldStructuredOutput {
-				out, _, err := parseStructuredOutput(data, outputSchemaCopy)
-				if err != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("failed to parse structured output: %v", err)), nil
+				// 解析 JSON 数据
+				var result map[string]any
+				if err := json.Unmarshal(data, &result); err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("failed to parse JSON: %v", err)), nil
 				}
-				filtered := filterOutputBySchema(out, outputSchemaCopy)
+
+				// 使用 SatisfySchema 进行验证
+				if !SatisfySchema(outputSchemaCopy, result) {
+					return mcp.NewToolResultError("output does not satisfy schema"), nil
+				}
+
+				// 过滤数据以匹配 schema
+				filtered := FilterDataBySchema(outputSchemaCopy, result)
 				bytes, err := json.Marshal(filtered)
 				if err != nil {
 					return mcp.NewToolResultError(fmt.Sprintf("failed to marshal filtered output: %v", err)), nil
@@ -458,138 +473,6 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 	}
 
 	return fmt.Errorf("application %s not found for tool %s", app.Name, iface.Name)
-}
-
-// parseStructuredOutput 解析结构化输出，支持对象、数组和双重编码的 JSON 字符串
-func parseStructuredOutput(data []byte, outputSchema map[string]any) (map[string]any, string, error) {
-	// 首先尝试解析为通用类型
-	var genericData any
-	if err := json.Unmarshal(data, &genericData); err != nil {
-		return nil, "", fmt.Errorf("invalid JSON: %v", err)
-	}
-
-	// 检查解析结果的类型
-	switch v := genericData.(type) {
-	case map[string]any:
-		// 直接是对象，返回
-		return v, string(data), nil
-
-	case []any:
-		// 是数组，需要包装成对象
-		// 检查 schema 的顶层 type，如果是 array，则包装；否则报错
-		schemaType, _ := outputSchema["type"].(string)
-		if schemaType == "array" {
-			// schema 定义的就是数组类型，包装为 { "items": [...] }
-			wrapped := map[string]any{"items": v}
-			return wrapped, string(data), nil
-		}
-		// 如果 schema 不是 array，尝试查找第一个是 array 类型的属性
-		if properties, ok := outputSchema["properties"].(map[string]any); ok {
-			for key, propSchema := range properties {
-				if propSchemaMap, ok := propSchema.(map[string]any); ok {
-					if propType, _ := propSchemaMap["type"].(string); propType == "array" {
-						// 找到了数组类型的属性，使用该属性名包装
-						wrapped := map[string]any{key: v}
-						return wrapped, string(data), nil
-					}
-				}
-			}
-		}
-		// 都不是，使用默认的 "items" 包装
-		wrapped := map[string]any{"items": v}
-		return wrapped, string(data), nil
-
-	case string:
-		// 可能是双重编码的 JSON 字符串
-		var out map[string]any
-		if err := json.Unmarshal([]byte(v), &out); err != nil {
-			// 尝试解析为数组
-			var arrData []any
-			if err2 := json.Unmarshal([]byte(v), &arrData); err2 == nil {
-				wrapped := map[string]any{"items": arrData}
-				return wrapped, v, nil
-			}
-			return nil, "", fmt.Errorf("failed to parse inner JSON string: %v", err)
-		}
-		return out, v, nil
-
-	default:
-		return nil, "", fmt.Errorf("unsupported JSON type: %T", genericData)
-	}
-}
-
-// filterOutputBySchema 根据 outputSchema 过滤输出，只保留 schema 中定义的字段（递归处理）
-func filterOutputBySchema(out map[string]any, outputSchema map[string]any) map[string]any {
-	if outputSchema == nil {
-		return out
-	}
-
-	// 获取 schema 中的 properties
-	properties, ok := outputSchema["properties"].(map[string]any)
-	if !ok || properties == nil {
-		return out
-	}
-
-	// 创建过滤后的结果
-	filtered := make(map[string]any)
-	for key, propSchema := range properties {
-		if value, exists := out[key]; exists {
-			// 递归处理复杂类型
-			filtered[key] = filterValueBySchema(value, propSchema)
-		}
-	}
-
-	return filtered
-}
-
-// filterValueBySchema 根据 schema 过滤单个值（递归处理对象和数组）
-func filterValueBySchema(value any, schema any) any {
-	schemaMap, ok := schema.(map[string]any)
-	if !ok {
-		return value
-	}
-
-	// 检查 schema 是否有嵌套的 properties（不依赖 type 字段）
-	if properties, ok := schemaMap["properties"].(map[string]any); ok {
-		// 如果 properties 本身又有 properties，说明有多层嵌套
-		if _, hasNested := properties["properties"].(map[string]any); hasNested {
-			// 递归处理，使用内层的 properties 作为真正的 schema
-			return filterValueBySchema(value, properties)
-		}
-
-		// 正常的对象类型，使用 properties 过滤
-		if valueMap, ok := value.(map[string]any); ok {
-			filtered := make(map[string]any)
-			for key, propSchema := range properties {
-				if v, exists := valueMap[key]; exists {
-					filtered[key] = filterValueBySchema(v, propSchema)
-				}
-			}
-			return filtered
-		}
-		return value
-	}
-
-	schemaType, _ := schemaMap["type"].(string)
-	switch schemaType {
-	case "array":
-		// 处理数组
-		if valueSlice, ok := value.([]any); ok {
-			items, hasItems := schemaMap["items"]
-			if hasItems {
-				filtered := make([]any, len(valueSlice))
-				for i, item := range valueSlice {
-					filtered[i] = filterValueBySchema(item, items)
-				}
-				return filtered
-			}
-		}
-		return value
-
-	default:
-		// 基础类型或无法识别的类型直接返回
-		return value
-	}
 }
 
 // RearrangeParametersAndValidate 应用默认值并验证参数
