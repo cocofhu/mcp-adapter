@@ -67,10 +67,10 @@ type FixedInputDTO struct {
 }
 
 type MCPToolDefinitionDTO struct {
-	Name        string          `json:"name"`
-	FixedInput  []FixedInputDTO `json:"fixed_input"`
-	InputSchema map[string]any  `json:"input_schema"`
-	Interfaces  InterfaceDTO    `json:"interfaces"`
+	Name         string          `json:"name"`
+	FixedInput   []FixedInputDTO `json:"fixed_input"`
+	InputSchema  map[string]any  `json:"input_schema"`
+	OutputSchema map[string]any  `json:"output_schema"`
 }
 
 type ApplicationDetailResponse struct {
@@ -165,6 +165,10 @@ func GetApplication(req GetApplicationRequest) (ApplicationDetailResponse, error
 		if err != nil {
 			return ApplicationDetailResponse{}, err
 		}
+		outputSchema, err := adapter.BuildMcpOutputSchemaByInterface(iface.ID)
+		if err != nil {
+			return ApplicationDetailResponse{}, err
+		}
 		fixedInputs := make([]FixedInputDTO, 0)
 		for _, param := range iface.Parameters {
 			if param.Group != "fixed" {
@@ -188,10 +192,10 @@ func GetApplication(req GetApplicationRequest) (ApplicationDetailResponse, error
 			})
 		}
 		toolDefinitions = append(toolDefinitions, MCPToolDefinitionDTO{
-			Name:        iface.Name,
-			FixedInput:  fixedInputs,
-			InputSchema: inputSchema,
-			Interfaces:  iface,
+			Name:         iface.Name,
+			FixedInput:   fixedInputs,
+			InputSchema:  inputSchema,
+			OutputSchema: outputSchema,
 		})
 	}
 	return ApplicationDetailResponse{Application: toApplicationDTO(app), ToolDefinitions: toolDefinitions}, nil

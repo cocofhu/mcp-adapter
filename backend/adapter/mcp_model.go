@@ -8,6 +8,7 @@ import (
 	"mcp-adapter/backend/database"
 	"mcp-adapter/backend/models"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,6 +70,11 @@ type RequestMeta struct {
 	AuthType string
 	Protocol string
 	Ext      map[string]string
+}
+
+type PostProcessMeta struct {
+	TruncateFields   map[string]int `json:"truncate_fields"`
+	StructuredOutput bool           `json:"structured_output"`
 }
 
 // AddCleanup 添加清理函数
@@ -389,22 +395,35 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 		log.Printf("Input schema for tool %s: %s", iface.Name, string(marshal))
 		newTool := mcp.NewToolWithRawSchema(iface.Name, iface.Description, marshal)
 
-		var outputSchema map[string]any
-		shouldStructuredOutput := false
-		if len(outputs) > 0 {
-			outputSchema, err = BuildMcpOutputSchemaByInterface(iface.ID)
-			if err != nil {
-				return err
+		postProcessMeta := PostProcessMeta{
+			TruncateFields:   make(map[string]int),
+			StructuredOutput: false,
+		}
+		if iface.PostProcess != "" {
+			if err := json.Unmarshal([]byte(iface.PostProcess), &postProcessMeta); err != nil {
+				log.Printf("Error unmarshalling post process meta: %v, tool id %d", err, iface.ID)
 			}
-			marshal, err = json.Marshal(outputSchema)
-			if err != nil {
-				return err
-			}
-			newTool.RawOutputSchema = marshal
-			shouldStructuredOutput = true
-			log.Printf("Output schema for tool %s: %s", iface.Name, string(marshal))
+			log.Printf("Post process meta for tool %s: %+v", iface.Name, postProcessMeta)
 		}
 
+		var outputSchema map[string]any
+		if postProcessMeta.StructuredOutput {
+			if len(outputs) > 0 {
+				outputSchema, err = BuildMcpOutputSchemaByInterface(iface.ID)
+				if err != nil {
+					return err
+				}
+				marshal, err = json.Marshal(outputSchema)
+				if err != nil {
+					return err
+				}
+				newTool.RawOutputSchema = marshal
+				log.Printf("Output schema for tool %s: %s", iface.Name, string(marshal))
+			} else {
+				log.Printf("Disabling structured output for tool %s due to no output parameters defined", iface.Name)
+				postProcessMeta.StructuredOutput = false
+			}
+		}
 		// 创建参数副本，缓存参数信息避免在调用时查库
 		paramsCopy := make([]models.InterfaceParameter, len(params))
 		copy(paramsCopy, params)
@@ -418,13 +437,14 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 			Protocol: iface.Protocol,
 			Ext:      make(map[string]string),
 		}
+
 		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 
 			if ok := SatisfySchema(inputSchemaCopy, req.GetArguments()); !ok {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid input schema: %v", err)), nil
 			}
 
-			finalParams, err := RearrangeParametersAndValidate(req.GetArguments(), paramsCopy)
+			finalParams, err := rearrangeParametersAndValidate(req.GetArguments(), paramsCopy)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -440,23 +460,30 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 				return mcp.NewToolResultError(fmt.Sprintf("no compatible handle found for tool %s", iface.Name)), nil
 			}
 			data, err := handle.DoRequest(ctx, req, *finalParams, meta)
-
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			if shouldStructuredOutput {
+			// 后处理：截取字段
+			for key, length := range postProcessMeta.TruncateFields {
+				bytes, err := truncate(key, length, data)
+				if err != nil {
+					log.Printf("Error truncating field %s for tool %s: %v", key, iface.Name, err)
+				} else {
+					data = bytes
+				}
+			}
+
+			if postProcessMeta.StructuredOutput {
 				// 解析 JSON 数据
 				var result map[string]any
 				if err := json.Unmarshal(data, &result); err != nil {
 					return mcp.NewToolResultError(fmt.Sprintf("failed to parse JSON: %v", err)), nil
 				}
-
 				// 使用 SatisfySchema 进行验证
 				if !SatisfySchema(outputSchemaCopy, result) {
 					return mcp.NewToolResultError("output does not satisfy schema"), nil
 				}
-
 				// 过滤数据以匹配 schema
 				filtered := FilterDataBySchema(outputSchemaCopy, result)
 				bytes, err := json.Marshal(filtered)
@@ -475,8 +502,110 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 	return fmt.Errorf("application %s not found for tool %s", app.Name, iface.Name)
 }
 
-// RearrangeParametersAndValidate 应用默认值并验证参数
-func RearrangeParametersAndValidate(rawParams map[string]any, params []models.InterfaceParameter) (*Parameters, error) {
+// truncateByPath 递归处理，支持 map、slice 的通配符 *
+func truncateByPath(v any, path []string, length int) {
+	if len(path) == 0 {
+		return
+	}
+
+	rv := reflect.ValueOf(v)
+
+	switch rv.Kind() {
+	case reflect.Map:
+		// map 类型
+		if path[0] == "*" {
+			// 通配符：遍历所有 key
+			for _, key := range rv.MapKeys() {
+				val := rv.MapIndex(key)
+				if len(path) == 1 {
+					// 最后一层
+					if val.Kind() == reflect.String {
+						strVal := val.String()
+						if len(strVal) > length {
+							rv.SetMapIndex(key, reflect.ValueOf(strVal[:length]))
+						}
+					}
+				} else {
+					truncateByPath(val.Interface(), path[1:], length)
+				}
+			}
+		} else {
+			// 指定 key
+			key := reflect.ValueOf(path[0])
+			val := rv.MapIndex(key)
+			if !val.IsValid() {
+				return
+			}
+			if len(path) == 1 {
+				if val.Kind() == reflect.String {
+					strVal := val.String()
+					if len(strVal) > length {
+						rv.SetMapIndex(key, reflect.ValueOf(strVal[:length]))
+					}
+				}
+			} else {
+				truncateByPath(val.Interface(), path[1:], length)
+			}
+		}
+
+	case reflect.Slice:
+		// slice 类型
+		if path[0] == "*" {
+			// 遍历所有元素
+			for i := 0; i < rv.Len(); i++ {
+				elem := rv.Index(i)
+				if len(path) == 1 {
+					if elem.Kind() == reflect.String {
+						strVal := elem.String()
+						if len(strVal) > length {
+							elem.Set(reflect.ValueOf(strVal[:length]))
+						}
+					}
+				} else {
+					truncateByPath(elem.Interface(), path[1:], length)
+				}
+			}
+		} else {
+			// 指定索引
+			index, err := strconv.Atoi(path[0])
+			if err != nil || index < 0 || index >= rv.Len() {
+				return
+			}
+			elem := rv.Index(index)
+			if len(path) == 1 {
+				if elem.Kind() == reflect.String {
+					strVal := elem.String()
+					if len(strVal) > length {
+						elem.Set(reflect.ValueOf(strVal[:length]))
+					}
+				}
+			} else {
+				truncateByPath(elem.Interface(), path[1:], length)
+			}
+		}
+	default:
+		return
+	}
+}
+
+func truncate(key string, length int, data []byte) ([]byte, error) {
+	var result any
+	if err := json.Unmarshal(data, &result); err != nil {
+		return data, fmt.Errorf("failed to parse JSON: %v", err)
+	}
+
+	keys := strings.Split(key, ".")
+	truncateByPath(result, keys, length)
+
+	newData, err := json.Marshal(result)
+	if err != nil {
+		return data, fmt.Errorf("failed to marshal JSON: %v", err)
+	}
+	return newData, nil
+}
+
+// rearrangeParametersAndValidate 应用默认值并验证参数
+func rearrangeParametersAndValidate(rawParams map[string]any, params []models.InterfaceParameter) (*Parameters, error) {
 
 	headerParams := make(map[string]any)
 	bodyParams := make(map[string]any)
