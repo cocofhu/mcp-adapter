@@ -47,8 +47,12 @@ test:unit:
 
 # 代码质量检查
 test:lint:
-  image: golangci/golangci-lint:v1.55
+  image: golang:1.25
   stage: test
+  before_script:
+    # 安装 golangci-lint
+    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.61.0
+    - export PATH=$PATH:$(go env GOPATH)/bin
   script:
     # 运行 golangci-lint 进行代码质量检查
     - golangci-lint run --timeout 5m --out-format colored-line-number ./...
@@ -63,8 +67,9 @@ test:security:
   stage: test
   script:
     # 运行 gosec 进行安全漏洞扫描
-    - gosec -fmt json -out gosec-report.json ./... || true
-    - gosec ./...
+    # 排除 vendor 和测试文件，只扫描源代码
+    - gosec -fmt json -out gosec-report.json -exclude-dir=vendor -exclude-dir=.git ./... || true
+    - gosec -exclude-dir=vendor -exclude-dir=.git ./...
   artifacts:
     paths:
       - gosec-report.json
