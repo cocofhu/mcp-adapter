@@ -67,12 +67,19 @@ type FixedInputDTO struct {
 	Value       any    `json:"value"`
 }
 
+type ToolMetaDTO struct {
+	URL      string `json:"url"`
+	Method   string `json:"method"`
+	AuthType string `json:"auth_type"`
+}
+
 type MCPToolDefinitionDTO struct {
 	Name         string                  `json:"name"`
 	FixedInput   []FixedInputDTO         `json:"fixed_input"`
 	InputSchema  map[string]any          `json:"input_schema"`
 	OutputSchema map[string]any          `json:"output_schema"`
 	PostProcess  adapter.PostProcessMeta `json:"post_process"`
+	ToolMeta     ToolMetaDTO             `json:"tool_meta"`
 }
 
 type ApplicationDetailResponse struct {
@@ -210,6 +217,11 @@ func GetApplication(req GetApplicationRequest) (ApplicationDetailResponse, error
 			InputSchema:  inputSchema,
 			OutputSchema: outputSchema,
 			PostProcess:  postProcessMeta,
+			ToolMeta: ToolMetaDTO{
+				URL:      iface.URL,
+				Method:   iface.Method,
+				AuthType: iface.AuthType,
+			},
 		})
 	}
 	return ApplicationDetailResponse{Application: toApplicationDTO(app), ToolDefinitions: toolDefinitions}, nil
