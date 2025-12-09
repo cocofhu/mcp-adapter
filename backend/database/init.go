@@ -177,6 +177,7 @@ func InitDefaultData() {
 		// 创建字段
 		for _, fieldDef := range ctDef.Fields {
 			field := models.CustomTypeField{
+				AppID:        app.ID,
 				CustomTypeID: ct.ID,
 				Name:         fieldDef.Name,
 				Type:         fieldDef.Type,
@@ -203,6 +204,7 @@ func InitDefaultData() {
 
 	// 为 CustomTypeResponse 添加 fields 字段（引用 CustomTypeField）
 	fieldsField := models.CustomTypeField{
+		AppID:        app.ID,
 		CustomTypeID: customTypeResponseTypeID,
 		Name:         "fields",
 		Type:         "custom",

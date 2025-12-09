@@ -63,9 +63,60 @@ func InitDatabase(dbPath string) {
 
 	dbInstance = db
 	log.Println("Database connected and migrated successfully")
+
+	// 执行数据迁移
+	migrateCustomTypeFieldAppID(db)
 }
 
 // GetDB 获取数据库实例
 func GetDB() *gorm.DB {
 	return dbInstance
+}
+
+// migrateCustomTypeFieldAppID 为现有的 CustomTypeField 记录填充 AppID
+func migrateCustomTypeFieldAppID(db *gorm.DB) {
+	log.Println("Starting migration: filling AppID for CustomTypeField records...")
+
+	// 检查是否有需要迁移的数据（AppID 为 0 或 NULL 的记录）
+	var count int64
+	db.Model(&models.CustomTypeField{}).Where("app_id = 0 OR app_id IS NULL").Count(&count)
+
+	if count == 0 {
+		log.Println("No CustomTypeField records need migration")
+		return
+	}
+
+	log.Printf("Found %d CustomTypeField records that need AppID migration", count)
+
+	// 获取所有需要迁移的字段
+	var fields []models.CustomTypeField
+	if err := db.Where("app_id = 0 OR app_id IS NULL").Find(&fields).Error; err != nil {
+		log.Printf("Failed to fetch CustomTypeField records for migration: %v", err)
+		return
+	}
+
+	// 批量更新：通过 CustomType 获取 AppID
+	successCount := 0
+	failCount := 0
+
+	for _, field := range fields {
+		var customType models.CustomType
+		if err := db.First(&customType, field.CustomTypeID).Error; err != nil {
+			log.Printf("Failed to find CustomType (ID: %d) for CustomTypeField (ID: %d): %v",
+				field.CustomTypeID, field.ID, err)
+			failCount++
+			continue
+		}
+
+		// 更新字段的 AppID
+		if err := db.Model(&field).Update("app_id", customType.AppID).Error; err != nil {
+			log.Printf("Failed to update AppID for CustomTypeField (ID: %d): %v", field.ID, err)
+			failCount++
+			continue
+		}
+
+		successCount++
+	}
+
+	log.Printf("Migration completed: %d records updated successfully, %d failed", successCount, failCount)
 }

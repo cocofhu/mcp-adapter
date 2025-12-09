@@ -171,8 +171,13 @@ func InitServer() {
 		// 初始化 maxEventID：从数据库获取当前最大事件ID
 		db := database.GetDB()
 		var maxID int64
-		if err := db.Model(&models.EventLog{}).Select("COALESCE(MAX(id), 0)").Scan(&maxID).Error; err != nil {
-			log.Printf("Warning: Failed to get max event ID, starting from 0: %v", err)
+		if db != nil {
+			if err := db.Model(&models.EventLog{}).Select("COALESCE(MAX(id), 0)").Scan(&maxID).Error; err != nil {
+				log.Printf("Warning: Failed to get max event ID, starting from 0: %v", err)
+				maxID = 0
+			}
+		} else {
+			log.Println("Warning: Database not initialized, starting maxEventID from 0")
 			maxID = 0
 		}
 		serverManager.maxEventID = maxID
@@ -327,6 +332,9 @@ func Shutdown() {
 
 	// 清理所有服务器
 	serverManager.cleanupAllServers()
+
+	serverManager = nil
+	initOnce = sync.Once{}
 
 	log.Println("ServerManager shutdown completed")
 }
@@ -787,6 +795,7 @@ func (sm *ServerManager) addApplication(app *models.Application) error {
 	})
 	// 存储服务器
 	sm.sseServers.Store(app.Path, srv)
+	log.Printf("Registering application: %s, protocol: %s, tools: %d, path: %s", app.Name, app.Protocol, len(interfaces), app.Path)
 	// 添加所有接口作为工具
 	for i := range interfaces {
 		if err := sm.addTool(&interfaces[i], app); err != nil {

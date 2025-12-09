@@ -119,7 +119,7 @@ func (mc MemoryComparison) Log() {
 func ForceGC() {
 	log.Println("Forcing garbage collection...")
 	runtime.GC()
-	time.Sleep(100 * time.Millisecond) // 等待 GC 完成
+	time.Sleep(5000 * time.Millisecond) // 等待 GC 完成
 	log.Println("Garbage collection completed")
 }
 

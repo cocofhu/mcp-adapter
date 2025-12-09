@@ -57,6 +57,7 @@ type DeleteCustomTypeRequest struct {
 
 type CustomTypeFieldDTO struct {
 	ID           int64     `json:"id"`
+	AppID        int64     `json:"app_id"`
 	CustomTypeID int64     `json:"custom_type_id"`
 	Name         string    `json:"name"`
 	Type         string    `json:"type"`
@@ -89,6 +90,7 @@ type CustomTypesResponse struct {
 func toCustomTypeFieldDTO(m models.CustomTypeField) CustomTypeFieldDTO {
 	return CustomTypeFieldDTO{
 		ID:           m.ID,
+		AppID:        m.AppID,
 		CustomTypeID: m.CustomTypeID,
 		Name:         m.Name,
 		Type:         m.Type,
@@ -269,6 +271,7 @@ func CreateCustomType(req CreateCustomTypeRequest) (CustomTypeResponse, error) {
 	fields := make([]models.CustomTypeField, 0, len(req.Fields))
 	for _, fieldReq := range req.Fields {
 		field := models.CustomTypeField{
+			AppID:        req.AppID,
 			CustomTypeID: customType.ID,
 			Name:         fieldReq.Name,
 			Type:         fieldReq.Type,
@@ -297,9 +300,9 @@ func GetCustomType(req GetCustomTypeRequest) (CustomTypeResponse, error) {
 	if err := db.First(&customType, req.ID).Error; err != nil {
 		return CustomTypeResponse{}, errors.New("custom type not found")
 	}
-	// 获取字段列表
+	// 获取字段列表，使用 app_id 索引优化查询
 	var fields []models.CustomTypeField
-	db.Where("custom_type_id = ?", customType.ID).Find(&fields)
+	db.Where("app_id = ? AND custom_type_id = ?", customType.AppID, customType.ID).Find(&fields)
 	return CustomTypeResponse{CustomType: toCustomTypeDTO(customType, fields)}, nil
 }
 
@@ -318,14 +321,15 @@ func ListCustomTypes(req ListCustomTypesRequest) (CustomTypesResponse, error) {
 	if err := db.Where("app_id = ?", req.AppID).Find(&customTypes).Error; err != nil {
 		return CustomTypesResponse{}, err
 	}
-	// 批量获取所有字段 增加AppId同样可以优化 避免where in 走不到索引
+	// 批量获取所有字段，使用 AppID 优化查询性能
 	typeIDs := make([]int64, 0, len(customTypes))
 	for _, ct := range customTypes {
 		typeIDs = append(typeIDs, ct.ID)
 	}
 	var allFields []models.CustomTypeField
 	if len(typeIDs) > 0 {
-		db.Where("custom_type_id IN ?", typeIDs).Find(&allFields)
+		// 使用 app_id 索引优化查询
+		db.Where("app_id = ? AND custom_type_id IN ?", req.AppID, typeIDs).Find(&allFields)
 	}
 	// 按 CustomTypeID 分组
 	fieldsByTypeID := make(map[int64][]models.CustomTypeField)
@@ -404,6 +408,7 @@ func UpdateCustomType(req UpdateCustomTypeRequest) (CustomTypeResponse, error) {
 		// 创建新字段
 		for _, fieldReq := range *req.Fields {
 			field := models.CustomTypeField{
+				AppID:        existing.AppID,
 				CustomTypeID: existing.ID,
 				Name:         fieldReq.Name,
 				Type:         fieldReq.Type,
