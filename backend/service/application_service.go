@@ -75,6 +75,7 @@ type ToolMetaDTO struct {
 
 type MCPToolDefinitionDTO struct {
 	Name         string                  `json:"name"`
+	Description  string                  `json:"description"`
 	FixedInput   []FixedInputDTO         `json:"fixed_input"`
 	InputSchema  map[string]any          `json:"input_schema"`
 	OutputSchema map[string]any          `json:"output_schema"`
@@ -213,6 +214,7 @@ func GetApplication(req GetApplicationRequest) (ApplicationDetailResponse, error
 
 		toolDefinitions = append(toolDefinitions, MCPToolDefinitionDTO{
 			Name:         iface.Name,
+			Description:  iface.Description,
 			FixedInput:   fixedInputs,
 			InputSchema:  inputSchema,
 			OutputSchema: outputSchema,
