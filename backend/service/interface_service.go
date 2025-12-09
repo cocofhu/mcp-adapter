@@ -424,9 +424,11 @@ func checkParameters(parameters *[]CreateInterfaceParameterReq, tx *gorm.DB, app
 						return errors.New("default value does not match parameter type 'number'")
 					}
 				case "boolean":
-					var b bool
-					_, err := fmt.Sscanf(*paramReq.DefaultValue, "%t", &b)
-					if err != nil {
+					// 严格验证布尔值：只接受 true, false, 1, 0
+					val := *paramReq.DefaultValue
+					if val != "true" && val != "false" && val != "1" && val != "0" &&
+						val != "t" && val != "f" && val != "T" && val != "F" &&
+						val != "TRUE" && val != "FALSE" && val != "True" && val != "False" {
 						return errors.New("default value does not match parameter type 'boolean'")
 					}
 				case "string":
