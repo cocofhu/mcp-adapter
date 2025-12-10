@@ -25,7 +25,7 @@ func TestTruncate(t *testing.T) {
 				"status": "success"
 			}`,
 			expected: `{
-				"message": "hello",
+				"message": "hello...",
 				"status": "success"
 			}`,
 			expectError: false,
@@ -42,7 +42,7 @@ func TestTruncate(t *testing.T) {
 			}`,
 			expected: `{
 				"user": {
-					"name": "Joh",
+					"name": "Joh...",
 					"age": 30
 				}
 			}`,
@@ -67,11 +67,11 @@ func TestTruncate(t *testing.T) {
 			expected: `{
 				"users": {
 					"user1": {
-						"name": "Alic",
+						"name": "Alic...",
 						"age": 25
 					},
 					"user2": {
-						"name": "Bob ",
+						"name": "Bob ...",
 						"age": 30
 					}
 				}
@@ -90,7 +90,7 @@ func TestTruncate(t *testing.T) {
 			}`,
 			expected: `{
 				"items": [
-					{"title": "First ", "id": 1},
+					{"title": "First ...", "id": 1},
 					{"title": "Second item description", "id": 2}
 				]
 			}`,
@@ -109,9 +109,9 @@ func TestTruncate(t *testing.T) {
 			}`,
 			expected: `{
 				"items": [
-					{"title": "First i", "id": 1},
-					{"title": "Second ", "id": 2},
-					{"title": "Third i", "id": 3}
+					{"title": "First i...", "id": 1},
+					{"title": "Second ...", "id": 2},
+					{"title": "Third i...", "id": 3}
 				]
 			}`,
 			expectError: false,
@@ -145,7 +145,7 @@ func TestTruncate(t *testing.T) {
 				"level1": {
 					"level2": {
 						"level3": {
-							"text": "dee"
+							"text": "dee..."
 						}
 					}
 				}
@@ -183,7 +183,7 @@ func TestTruncate(t *testing.T) {
 			key:         "*",
 			length:      5,
 			inputData:   `["hello world", "foo bar", "test"]`,
-			expected:    `["hello", "foo b", "test"]`,
+			expected:    `["hello...", "foo b...", "test"]`,
 			expectError: false,
 		},
 		{
@@ -229,11 +229,11 @@ func TestTruncate(t *testing.T) {
 				"response": {
 					"data": {
 						"item1": {
-							"description": "This is a ",
+							"description": "This is a ...",
 							"id": 1
 						},
 						"item2": {
-							"description": "Another le",
+							"description": "Another le...",
 							"id": 2
 						}
 					},
@@ -243,15 +243,82 @@ func TestTruncate(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:   "zero length truncation",
+			name:   "zero length truncation - delete field",
 			key:    "message",
 			length: 0,
 			inputData: `{
-				"message": "hello"
+				"message": "hello",
+				"status": "ok"
 			}`,
 			expected: `{
-				"message": ""
+				"status": "ok"
 			}`,
+			expectError: false,
+		},
+		{
+			name:   "zero length with wildcard - delete all matching fields",
+			key:    "users.*.email",
+			length: 0,
+			inputData: `{
+				"users": {
+					"user1": {"name": "Alice", "email": "alice@example.com"},
+					"user2": {"name": "Bob", "email": "bob@example.com"}
+				}
+			}`,
+			expected: `{
+				"users": {
+					"user1": {"name": "Alice"},
+					"user2": {"name": "Bob"}
+				}
+			}`,
+			expectError: false,
+		},
+		{
+			name:   "zero length on array - delete elements",
+			key:    "items.*",
+			length: 0,
+			inputData: `{
+				"items": ["first", "second", "third"]
+			}`,
+			expected: `{
+				"items": []
+			}`,
+			expectError: false,
+		},
+		{
+			name:   "truncate with unicode characters",
+			key:    "message",
+			length: 5,
+			inputData: `{
+				"message": "你好世界，这是一个测试"
+			}`,
+			expected: `{
+				"message": "你好世界，..."
+			}`,
+			expectError: false,
+		},
+		{
+			name:   "truncate exactly at length boundary",
+			key:    "text",
+			length: 5,
+			inputData: `{
+				"text": "hello"
+			}`,
+			expected: `{
+				"text": "hello"
+			}`,
+			expectError: false,
+		},
+		{
+			name:   "truncate mixed types in array",
+			key:    "data.*",
+			length: 3,
+			inputData: `{
+			"data": ["string value", 12345, true, "short"]
+		}`,
+			expected: `{
+			"data": ["str...", 12345, true, "sho..."]
+		}`,
 			expectError: false,
 		},
 	}
@@ -310,7 +377,7 @@ func TestTruncateByPath(t *testing.T) {
 			path:   []string{"message"},
 			length: 5,
 			expected: map[string]any{
-				"message": "hello",
+				"message": "hello...",
 				"status":  "success",
 			},
 		},
@@ -326,7 +393,7 @@ func TestTruncateByPath(t *testing.T) {
 			length: 4,
 			expected: map[string]any{
 				"user": map[string]any{
-					"name": "John",
+					"name": "John...",
 					"age":  30,
 				},
 			},
@@ -340,8 +407,8 @@ func TestTruncateByPath(t *testing.T) {
 			path:   []string{"*"},
 			length: 5,
 			expected: map[string]any{
-				"user1": "Alice",
-				"user2": "Bob J",
+				"user1": "Alice...",
+				"user2": "Bob J...",
 			},
 		},
 		{
@@ -355,7 +422,7 @@ func TestTruncateByPath(t *testing.T) {
 			length: 6,
 			expected: []any{
 				"first string",
-				"second",
+				"second...",
 				"third string",
 			},
 		},
@@ -369,9 +436,9 @@ func TestTruncateByPath(t *testing.T) {
 			path:   []string{"*"},
 			length: 5,
 			expected: []any{
-				"first",
-				"secon",
-				"third",
+				"first...",
+				"secon...",
+				"third...",
 			},
 		},
 		{
@@ -386,8 +453,8 @@ func TestTruncateByPath(t *testing.T) {
 			length: 5,
 			expected: map[string]any{
 				"users": []any{
-					map[string]any{"name": "Alice", "age": 25},
-					map[string]any{"name": "Bob S", "age": 30},
+					map[string]any{"name": "Alice...", "age": 25},
+					map[string]any{"name": "Bob S...", "age": 30},
 				},
 			},
 		},
@@ -418,6 +485,121 @@ func TestTruncateByPath(t *testing.T) {
 			path:     []string{"count"},
 			length:   2,
 			expected: map[string]any{"count": 12345},
+		},
+		{
+			name: "zero length deletes field from map",
+			data: map[string]any{
+				"message": "hello",
+				"status":  "ok",
+			},
+			path:   []string{"message"},
+			length: 0,
+			expected: map[string]any{
+				"status": "ok",
+			},
+		},
+		{
+			name: "zero length deletes element from array",
+			data: []any{
+				"first",
+				"second",
+				"third",
+			},
+			path:   []string{"1"},
+			length: 0,
+			expected: []any{
+				"first",
+				"third",
+			},
+		},
+		{
+			name: "zero length with wildcard deletes all array elements",
+			data: []any{
+				"first",
+				"second",
+				"third",
+			},
+			path:     []string{"*"},
+			length:   0,
+			expected: []any{},
+		},
+		{
+			name: "zero length with wildcard deletes all map fields",
+			data: map[string]any{
+				"field1": "value1",
+				"field2": "value2",
+				"field3": 123,
+			},
+			path:     []string{"*"},
+			length:   0,
+			expected: map[string]any{},
+		},
+		{
+			name: "zero length on nested field",
+			data: map[string]any{
+				"user": map[string]any{
+					"name":  "John",
+					"email": "john@example.com",
+					"age":   30,
+				},
+			},
+			path:   []string{"user", "email"},
+			length: 0,
+			expected: map[string]any{
+				"user": map[string]any{
+					"name": "John",
+					"age":  30,
+				},
+			},
+		},
+		{
+			name: "string exactly at length - no truncation",
+			data: map[string]any{
+				"text": "hello",
+			},
+			path:   []string{"text"},
+			length: 5,
+			expected: map[string]any{
+				"text": "hello",
+			},
+		},
+		{
+			name: "truncate with unicode characters",
+			data: map[string]any{
+				"message": "你好世界，这是一个测试",
+			},
+			path:   []string{"message"},
+			length: 5,
+			expected: map[string]any{
+				"message": "你好世界，...",
+			},
+		},
+		{
+			name: "deeply nested with multiple wildcards",
+			data: map[string]any{
+				"departments": map[string]any{
+					"engineering": []any{
+						map[string]any{"name": "Alice Johnson", "role": "Engineer"},
+						map[string]any{"name": "Bob Smith", "role": "Manager"},
+					},
+					"sales": []any{
+						map[string]any{"name": "Charlie Brown", "role": "Sales Rep"},
+					},
+				},
+			},
+			path:   []string{"departments", "*", "*", "name"},
+			length: 5,
+			expected: map[string]any{
+				"departments": map[string]any{
+					"engineering": []any{
+						map[string]any{"name": "Alice...", "role": "Engineer"},
+						map[string]any{"name": "Bob S...", "role": "Manager"},
+					},
+					"sales": []any{
+						map[string]any{"name": "Charl...", "role": "Sales Rep"},
+					},
+				},
+			},
 		},
 	}
 

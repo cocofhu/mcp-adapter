@@ -519,9 +519,19 @@ func truncateByPath(data any, path []string, length int) any {
 			// 通配符：处理所有 key
 			for k, v := range m {
 				if len(path) == 1 {
-					// 最后一层，截断字符串
-					if str, ok := v.(string); ok && len(str) > length {
-						result[k] = str[:length]
+					// 最后一层
+					if length == 0 {
+						// length 为 0 时删除字段
+						continue
+					}
+					// 只对字符串类型进行截断
+					if str, ok := v.(string); ok {
+						runes := []rune(str)
+						if len(runes) > length {
+							result[k] = string(runes[:length]) + "..."
+						} else {
+							result[k] = v
+						}
 					} else {
 						result[k] = v
 					}
@@ -536,9 +546,19 @@ func truncateByPath(data any, path []string, length int) any {
 			for k, v := range m {
 				if k == targetKey {
 					if len(path) == 1 {
-						// 最后一层，截断字符串
-						if str, ok := v.(string); ok && len(str) > length {
-							result[k] = str[:length]
+						// 最后一层
+						if length == 0 {
+							// length 为 0 时删除字段
+							continue
+						}
+						// 只对字符串类型进行截断
+						if str, ok := v.(string); ok {
+							runes := []rune(str)
+							if len(runes) > length {
+								result[k] = string(runes[:length]) + "..."
+							} else {
+								result[k] = v
+							}
 						} else {
 							result[k] = v
 						}
@@ -556,17 +576,28 @@ func truncateByPath(data any, path []string, length int) any {
 
 	// 处理 slice 类型
 	if arr, ok := data.([]any); ok {
-		result := make([]any, len(arr))
+		result := make([]any, 0, len(arr))
 		if path[0] == "*" {
-			for i, v := range arr {
+			for _, v := range arr {
 				if len(path) == 1 {
-					if str, ok := v.(string); ok && len(str) > length {
-						result[i] = str[:length]
+					// 最后一层
+					if length == 0 {
+						// length 为 0 时删除元素
+						continue
+					}
+					// 只对字符串类型进行截断
+					if str, ok := v.(string); ok {
+						runes := []rune(str)
+						if len(runes) > length {
+							result = append(result, string(runes[:length])+"...")
+						} else {
+							result = append(result, v)
+						}
 					} else {
-						result[i] = v
+						result = append(result, v)
 					}
 				} else {
-					result[i] = truncateByPath(v, path[1:], length)
+					result = append(result, truncateByPath(v, path[1:], length))
 				}
 			}
 		} else {
@@ -575,20 +606,31 @@ func truncateByPath(data any, path []string, length int) any {
 				for i, v := range arr {
 					if i == index {
 						if len(path) == 1 {
-							if str, ok := v.(string); ok && len(str) > length {
-								result[i] = str[:length]
+							// 最后一层
+							if length == 0 {
+								// length 为 0 时删除元素
+								continue
+							}
+							// 只对字符串类型进行截断
+							if str, ok := v.(string); ok {
+								runes := []rune(str)
+								if len(runes) > length {
+									result = append(result, string(runes[:length])+"...")
+								} else {
+									result = append(result, v)
+								}
 							} else {
-								result[i] = v
+								result = append(result, v)
 							}
 						} else {
-							result[i] = truncateByPath(v, path[1:], length)
+							result = append(result, truncateByPath(v, path[1:], length))
 						}
 					} else {
-						result[i] = v
+						result = append(result, v)
 					}
 				}
 			} else {
-				copy(result, arr)
+				result = append(result, arr...)
 			}
 		}
 		return result
