@@ -1988,7 +1988,8 @@ func TestSchemaBuilder_BuildFieldTypeSchema(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := builder.buildFieldTypeSchema(tt.field)
+			ctx := newBuildContext()
+			result, err := builder.buildFieldTypeSchema(tt.field, ctx)
 
 			if tt.expectErr {
 				if err == nil {
@@ -2122,7 +2123,8 @@ func TestSchemaBuilder_BuildSchemaByField(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := builder.buildSchemaByField(tt.field)
+			ctx := newBuildContext()
+			result, err := builder.buildSchemaByField(tt.field, ctx)
 
 			if tt.expectErr {
 				if err == nil {
@@ -2292,7 +2294,8 @@ func TestSchemaBuilder_BuildSchemaByType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := builder.buildSchemaByType(tt.typeId)
+			ctx := newBuildContext()
+			result, err := builder.buildSchemaByType(tt.typeId, ctx)
 
 			if tt.expectErr {
 				if err == nil {
@@ -2397,7 +2400,8 @@ func TestSchemaBuilder_ComplexNestedTypes(t *testing.T) {
 		},
 	}
 
-	result, err := builder.buildSchemaByType(1)
+	ctx := newBuildContext()
+	result, err := builder.buildSchemaByType(1, ctx)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -2595,4 +2599,397 @@ func compareSchemas(a, b map[string]any) bool {
 	}
 
 	return true
+}
+
+// TestBuildContext_DepthCheck 测试递归深度检查
+func TestBuildContext_DepthCheck(t *testing.T) {
+	tests := []struct {
+		name        string
+		depth       int
+		shouldError bool
+	}{
+		{
+			name:        "depth 0 - should pass",
+			depth:       0,
+			shouldError: false,
+		},
+		{
+			name:        "depth 5 - should pass",
+			depth:       5,
+			shouldError: false,
+		},
+		{
+			name:        "depth at max - should pass",
+			depth:       maxRecursionDepth - 1,
+			shouldError: false,
+		},
+		{
+			name:        "depth exceeds max - should error",
+			depth:       maxRecursionDepth,
+			shouldError: true,
+		},
+		{
+			name:        "depth far exceeds max - should error",
+			depth:       maxRecursionDepth + 10,
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &buildContext{
+				depth: tt.depth,
+			}
+
+			err := ctx.checkDepth()
+
+			if tt.shouldError && err == nil {
+				t.Errorf("Expected error for depth %d, but got nil", tt.depth)
+			}
+
+			if !tt.shouldError && err != nil {
+				t.Errorf("Expected no error for depth %d, but got: %v", tt.depth, err)
+			}
+		})
+	}
+}
+
+// TestBuildContext_Next 测试上下文的 next 方法
+func TestBuildContext_Next(t *testing.T) {
+	tests := []struct {
+		name          string
+		initialDepth  int
+		expectedDepth int
+	}{
+		{
+			name:          "depth 0 to 1",
+			initialDepth:  0,
+			expectedDepth: 1,
+		},
+		{
+			name:          "depth 5 to 6",
+			initialDepth:  5,
+			expectedDepth: 6,
+		},
+		{
+			name:          "depth 10 to 11",
+			initialDepth:  10,
+			expectedDepth: 11,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &buildContext{
+				depth: tt.initialDepth,
+			}
+
+			newCtx := ctx.next()
+
+			if newCtx.depth != tt.expectedDepth {
+				t.Errorf("Expected depth %d, got %d", tt.expectedDepth, newCtx.depth)
+			}
+
+			// 确保原上下文未被修改
+			if ctx.depth != tt.initialDepth {
+				t.Errorf("Original context depth was modified from %d to %d", tt.initialDepth, ctx.depth)
+			}
+		})
+	}
+}
+
+// TestNewBuildContext 测试新建上下文
+func TestNewBuildContext(t *testing.T) {
+	ctx := newBuildContext()
+
+	if ctx == nil {
+		t.Fatal("Expected non-nil context")
+	}
+
+	if ctx.depth != 0 {
+		t.Errorf("Expected initial depth 0, got %d", ctx.depth)
+	}
+}
+
+// TestSchemaBuilder_RecursionDepthLimit 测试递归深度限制
+func TestSchemaBuilder_RecursionDepthLimit(t *testing.T) {
+	// 创建一个深度嵌套的类型结构
+	ref1 := int64(2)
+	ref2 := int64(1)
+	builder := &schemaBuilder{
+		types: map[int64]*models.CustomType{
+			1: {
+				ID:          1,
+				Name:        "Type1",
+				Description: "First type",
+				AppID:       100,
+			},
+			2: {
+				ID:          2,
+				Name:        "Type2",
+				Description: "Second type",
+				AppID:       100,
+			},
+		},
+		fields: map[int64][]models.CustomTypeField{
+			1: {
+				{
+					ID:       1,
+					Name:     "nested",
+					Type:     "custom",
+					Ref:      &ref1,
+					Required: false,
+					AppID:    100,
+				},
+			},
+			2: {
+				{
+					ID:       2,
+					Name:     "nested",
+					Type:     "custom",
+					Ref:      &ref2, // 循环引用
+					Required: false,
+					AppID:    100,
+				},
+			},
+		},
+	}
+
+	// 创建一个接近最大深度的上下文
+	ctx := &buildContext{
+		depth: maxRecursionDepth - 1,
+	}
+
+	// 尝试构建 schema，应该在下一层递归时失败
+	_, err := builder.buildSchemaByType(1, ctx)
+
+	if err == nil {
+		t.Error("Expected error when exceeding max recursion depth, but got nil")
+		return
+	}
+
+	if err.Error() != "maximum recursion depth exceeded" {
+		t.Errorf("Expected 'maximum recursion depth exceeded' error, got: %v", err)
+	}
+}
+
+// TestSchemaBuilder_AppIdFiltering 测试 AppId 过滤功能
+func TestSchemaBuilder_AppIdFiltering(t *testing.T) {
+	// 注意：这个测试需要实际的数据库连接
+	// 这里我们测试 schemaBuilder 的内存数据结构是否正确过滤
+
+	builder := &schemaBuilder{
+		types: map[int64]*models.CustomType{
+			1: {
+				ID:          1,
+				Name:        "App1Type",
+				Description: "Type for app 1",
+				AppID:       1,
+			},
+			2: {
+				ID:          2,
+				Name:        "App2Type",
+				Description: "Type for app 2",
+				AppID:       2,
+			},
+		},
+		fields: map[int64][]models.CustomTypeField{
+			1: {
+				{
+					ID:       1,
+					Name:     "field1",
+					Type:     "string",
+					Required: true,
+					AppID:    1,
+				},
+			},
+			2: {
+				{
+					ID:       2,
+					Name:     "field2",
+					Type:     "number",
+					Required: false,
+					AppID:    2,
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name           string
+		typeId         int64
+		expectedAppId  int64
+		shouldHaveType bool
+	}{
+		{
+			name:           "get type from app 1",
+			typeId:         1,
+			expectedAppId:  1,
+			shouldHaveType: true,
+		},
+		{
+			name:           "get type from app 2",
+			typeId:         2,
+			expectedAppId:  2,
+			shouldHaveType: true,
+		},
+		{
+			name:           "get non-existent type",
+			typeId:         999,
+			expectedAppId:  0,
+			shouldHaveType: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			customType, err := builder.getCustomType(tt.typeId)
+
+			if tt.shouldHaveType {
+				if err != nil {
+					t.Errorf("Expected to find type, but got error: %v", err)
+				}
+				if customType.AppID != tt.expectedAppId {
+					t.Errorf("Expected AppID %d, got %d", tt.expectedAppId, customType.AppID)
+				}
+			} else {
+				if err == nil {
+					t.Error("Expected error for non-existent type, but got nil")
+				}
+			}
+		})
+	}
+}
+
+// TestSchemaBuilder_CircularReferenceWithDepthLimit 测试循环引用在深度限制下的行为
+func TestSchemaBuilder_CircularReferenceWithDepthLimit(t *testing.T) {
+	// 创建一个简单的循环引用：A -> B -> A
+	refToB := int64(2)
+	refToA := int64(1)
+	builder := &schemaBuilder{
+		types: map[int64]*models.CustomType{
+			1: {
+				ID:          1,
+				Name:        "TypeA",
+				Description: "Type A",
+				AppID:       100,
+			},
+			2: {
+				ID:          2,
+				Name:        "TypeB",
+				Description: "Type B",
+				AppID:       100,
+			},
+		},
+		fields: map[int64][]models.CustomTypeField{
+			1: {
+				{
+					ID:       1,
+					Name:     "toB",
+					Type:     "custom",
+					Ref:      &refToB,
+					Required: false,
+					AppID:    100,
+				},
+			},
+			2: {
+				{
+					ID:       2,
+					Name:     "toA",
+					Type:     "custom",
+					Ref:      &refToA,
+					Required: false,
+					AppID:    100,
+				},
+			},
+		},
+	}
+
+	ctx := newBuildContext()
+
+	// 循环引用会导致递归深度不断增加，最终达到深度限制
+	schema, err := builder.buildSchemaByType(1, ctx)
+
+	// 由于循环引用，最终会因为深度限制而返回错误
+	if err == nil {
+		t.Error("Expected error due to circular reference exceeding depth limit, but got nil")
+	}
+
+	if err != nil && err.Error() != "maximum recursion depth exceeded" {
+		t.Errorf("Expected 'maximum recursion depth exceeded' error, got: %v", err)
+	}
+
+	// schema 应该为 nil，因为构建失败
+	if schema != nil {
+		t.Error("Expected nil schema due to error")
+	}
+}
+
+// TestSchemaBuilder_DeepNesting 测试深度嵌套但无循环的情况
+func TestSchemaBuilder_DeepNesting(t *testing.T) {
+	// 创建一个深度嵌套的结构：A -> B -> C -> D
+	refToB := int64(2)
+	refToC := int64(3)
+	refToD := int64(4)
+	builder := &schemaBuilder{
+		types: map[int64]*models.CustomType{
+			1: {ID: 1, Name: "TypeA", Description: "Type A", AppID: 100},
+			2: {ID: 2, Name: "TypeB", Description: "Type B", AppID: 100},
+			3: {ID: 3, Name: "TypeC", Description: "Type C", AppID: 100},
+			4: {ID: 4, Name: "TypeD", Description: "Type D", AppID: 100},
+		},
+		fields: map[int64][]models.CustomTypeField{
+			1: {
+				{ID: 1, Name: "toB", Type: "custom", Ref: &refToB, AppID: 100},
+			},
+			2: {
+				{ID: 2, Name: "toC", Type: "custom", Ref: &refToC, AppID: 100},
+			},
+			3: {
+				{ID: 3, Name: "toD", Type: "custom", Ref: &refToD, AppID: 100},
+			},
+			4: {
+				{ID: 4, Name: "value", Type: "string", AppID: 100},
+			},
+		},
+	}
+
+	ctx := newBuildContext()
+
+	schema, err := builder.buildSchemaByType(1, ctx)
+
+	if err != nil {
+		t.Errorf("Unexpected error for deep nesting: %v", err)
+	}
+
+	if schema == nil {
+		t.Fatal("Expected non-nil schema")
+	}
+
+	// 验证嵌套结构
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("Expected properties to be a map")
+	}
+
+	// 检查第一层
+	toBProp, exists := properties["toB"]
+	if !exists {
+		t.Fatal("Expected 'toB' property")
+	}
+
+	toBMap, ok := toBProp.(map[string]any)
+	if !ok {
+		t.Fatal("Expected 'toB' to be a map")
+	}
+
+	// 检查第二层
+	toBProperties, ok := toBMap["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("Expected nested properties")
+	}
+
+	if _, exists := toBProperties["toC"]; !exists {
+		t.Error("Expected 'toC' property in nested structure")
+	}
 }

@@ -16,25 +16,55 @@ const (
 	validationTypeNotMatch
 )
 
+// 递归深度限制，防止无限递归
+const maxRecursionDepth = 255
+
 // schemaBuilder 用于构建schema的辅助结构，所有数据在构建前一次性加载到内存
 type schemaBuilder struct {
 	types  map[int64]*models.CustomType
 	fields map[int64][]models.CustomTypeField
 }
 
-// newSchemaBuilder 创建新的schema构建器并加载所有数据
-func newSchemaBuilder() (*schemaBuilder, error) {
+// buildContext 构建上下文，用于追踪递归深度
+type buildContext struct {
+	depth int // 当前递归深度
+}
+
+// newBuildContext 创建新的构建上下文
+func newBuildContext() *buildContext {
+	return &buildContext{
+		depth: 0,
+	}
+}
+
+// checkDepth 检查递归深度是否超限
+func (ctx *buildContext) checkDepth() error {
+	if ctx.depth >= maxRecursionDepth {
+		return errors.New("maximum recursion depth exceeded")
+	}
+	return nil
+}
+
+// next 创建下一层递归的上下文
+func (ctx *buildContext) next() *buildContext {
+	return &buildContext{
+		depth: ctx.depth + 1,
+	}
+}
+
+// newSchemaBuilder 创建新的schema构建器并加载指定应用的数据
+func newSchemaBuilder(appId int64) (*schemaBuilder, error) {
 	db := database.GetDB()
 
-	// 一次性加载所有自定义类型
+	// 一次性加载指定应用的自定义类型
 	var allTypes []models.CustomType
-	if err := db.Find(&allTypes).Error; err != nil {
+	if err := db.Where("app_id = ?", appId).Find(&allTypes).Error; err != nil {
 		return nil, errors.New("failed to load custom types")
 	}
 
-	// 一次性加载所有自定义类型字段
+	// 一次性加载指定应用的自定义类型字段
 	var allFields []models.CustomTypeField
-	if err := db.Find(&allFields).Error; err != nil {
+	if err := db.Where("app_id = ?", appId).Find(&allFields).Error; err != nil {
 		return nil, errors.New("failed to load custom type fields")
 	}
 
@@ -74,27 +104,27 @@ func (sb *schemaBuilder) getCustomTypeFields(typeId int64) ([]models.CustomTypeF
 }
 
 // buildSchemaByField 根据字段构建schema
-func (sb *schemaBuilder) buildSchemaByField(field *models.CustomTypeField) (map[string]any, error) {
+func (sb *schemaBuilder) buildSchemaByField(field *models.CustomTypeField, ctx *buildContext) (map[string]any, error) {
 	schema := make(map[string]any)
 	schema["description"] = field.Description
 
 	if field.IsArray {
 		schema["type"] = "array"
-		items, err := sb.buildFieldTypeSchema(field)
+		items, err := sb.buildFieldTypeSchema(field, ctx)
 		if err != nil {
 			return nil, err
 		}
 		schema["items"] = items
 	} else {
 		// 非数组类型，直接返回类型schema
-		return sb.buildFieldTypeSchema(field)
+		return sb.buildFieldTypeSchema(field, ctx)
 	}
 
 	return schema, nil
 }
 
 // buildFieldTypeSchema 构建字段的类型schema（不包含数组包装）
-func (sb *schemaBuilder) buildFieldTypeSchema(field *models.CustomTypeField) (map[string]any, error) {
+func (sb *schemaBuilder) buildFieldTypeSchema(field *models.CustomTypeField, ctx *buildContext) (map[string]any, error) {
 	if field.Type != "custom" {
 		// 基础类型
 		return map[string]any{
@@ -109,11 +139,16 @@ func (sb *schemaBuilder) buildFieldTypeSchema(field *models.CustomTypeField) (ma
 	}
 
 	// 直接返回自定义类型的完整schema
-	return sb.buildSchemaByType(*field.Ref)
+	return sb.buildSchemaByType(*field.Ref, ctx)
 }
 
-// buildSchemaByType 根据自定义类型ID构建完整的object schema
-func (sb *schemaBuilder) buildSchemaByType(customTypeId int64) (map[string]any, error) {
+// buildSchemaByType 根据自定义类型ID构建完整的schema
+func (sb *schemaBuilder) buildSchemaByType(customTypeId int64, ctx *buildContext) (map[string]any, error) {
+	// 检查递归深度
+	if err := ctx.checkDepth(); err != nil {
+		return nil, err
+	}
+
 	customType, err := sb.getCustomType(customTypeId)
 	if err != nil {
 		return nil, err
@@ -131,12 +166,15 @@ func (sb *schemaBuilder) buildSchemaByType(customTypeId int64) (map[string]any, 
 	required := make([]string, 0)
 	properties := make(map[string]any)
 
+	// 创建下一层递归的上下文
+	newCtx := ctx.next()
+
 	for _, field := range fields {
 		if field.Required {
 			required = append(required, field.Name)
 		}
 
-		property, err := sb.buildSchemaByField(&field)
+		property, err := sb.buildSchemaByField(&field, newCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -169,11 +207,14 @@ func buildMcpSchemaByInterface(id int64, group string) (map[string]any, error) {
 		return nil, errors.New("failed to fetch interface parameters")
 	}
 
-	// 创建schema构建器，一次性加载所有数据到内存
-	builder, err := newSchemaBuilder()
+	// 创建schema构建器，一次性加载指定应用的数据到内存
+	builder, err := newSchemaBuilder(iface.AppID)
 	if err != nil {
 		return nil, err
 	}
+
+	// 创建构建上下文，用于追踪递归深度和环形引用
+	ctx := newBuildContext()
 
 	schema := make(map[string]any)
 	schema["type"] = "object"
@@ -192,7 +233,7 @@ func buildMcpSchemaByInterface(id int64, group string) (map[string]any, error) {
 			required = append(required, param.Name)
 		}
 
-		property, err := builder.buildSchemaByParameter(&param)
+		property, err := builder.buildSchemaByParameter(&param, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -204,28 +245,28 @@ func buildMcpSchemaByInterface(id int64, group string) (map[string]any, error) {
 	return schema, nil
 }
 
-// buildSchemaByParameter 根据接口参数构建schema
-func (sb *schemaBuilder) buildSchemaByParameter(param *models.InterfaceParameter) (map[string]any, error) {
+// buildSchemaByParameter 根据参数构建schema
+func (sb *schemaBuilder) buildSchemaByParameter(param *models.InterfaceParameter, ctx *buildContext) (map[string]any, error) {
 	schema := make(map[string]any)
 	schema["description"] = param.Description
 
 	if param.IsArray {
 		schema["type"] = "array"
-		items, err := sb.buildParameterTypeSchema(param)
+		items, err := sb.buildParameterTypeSchema(param, ctx)
 		if err != nil {
 			return nil, err
 		}
 		schema["items"] = items
 	} else {
 		// 非数组类型，直接返回类型schema
-		return sb.buildParameterTypeSchema(param)
+		return sb.buildParameterTypeSchema(param, ctx)
 	}
 
 	return schema, nil
 }
 
 // buildParameterTypeSchema 构建参数的类型schema（不包含数组包装）
-func (sb *schemaBuilder) buildParameterTypeSchema(param *models.InterfaceParameter) (map[string]any, error) {
+func (sb *schemaBuilder) buildParameterTypeSchema(param *models.InterfaceParameter, ctx *buildContext) (map[string]any, error) {
 	if param.Type != "custom" {
 		// 基础类型
 		return map[string]any{
@@ -240,7 +281,7 @@ func (sb *schemaBuilder) buildParameterTypeSchema(param *models.InterfaceParamet
 	}
 
 	// 直接返回自定义类型的完整schema
-	return sb.buildSchemaByType(*param.Ref)
+	return sb.buildSchemaByType(*param.Ref, ctx)
 }
 
 func SatisfySchema(schema map[string]any, data any) bool {
