@@ -8,16 +8,8 @@ import (
 	"reflect"
 )
 
-// Schema validation result constants
-const (
-	validationMatched = iota
-	validationSchemaNotExist
-	validationDataNotExist
-	validationTypeNotMatch
-)
-
 // 递归深度限制，防止无限递归
-const maxRecursionDepth = 255
+const maxRecursionDepth = 4096
 
 // schemaBuilder 用于构建schema的辅助结构，所有数据在构建前一次性加载到内存
 type schemaBuilder struct {
@@ -284,94 +276,171 @@ func (sb *schemaBuilder) buildParameterTypeSchema(param *models.InterfaceParamet
 	return sb.buildSchemaByType(*param.Ref, ctx)
 }
 
+// SatisfySchema 验证数据是否满足schema定义
 func SatisfySchema(schema map[string]any, data any) bool {
 	if schema == nil {
 		return true
 	}
-	if isNil(data) {
-		data = make(map[string]any)
+
+	// 检查schema树中是否存在任何required字段
+	var hasAnyRequired func(s map[string]any, depth int) bool
+	hasAnyRequired = func(s map[string]any, depth int) bool {
+		if s == nil || depth > maxRecursionDepth {
+			return false
+		}
+
+		// 检查当前层级的required字段
+		if required, ok := s["required"].([]any); ok && len(required) > 0 {
+			return true
+		}
+		if required, ok := s["required"].([]string); ok && len(required) > 0 {
+			return true
+		}
+
+		// 递归检查properties中的嵌套对象
+		if properties, ok := s["properties"].(map[string]any); ok {
+			for _, propSchema := range properties {
+				if propSchemaMap, ok := propSchema.(map[string]any); ok {
+					if hasAnyRequired(propSchemaMap, depth+1) {
+						return true
+					}
+				}
+			}
+		}
+
+		// 检查array的items
+		if items, ok := s["items"].(map[string]any); ok {
+			if hasAnyRequired(items, depth+1) {
+				return true
+			}
+		}
+
+		return false
 	}
-	var dfs func(schema, data any, depth int) int
-	dfs = func(schema, data any, depth int) int {
-		// 防止无限递归
-		const maxDepth = 100
-		if depth > maxDepth {
-			log.Printf("Warning: schema validation exceeded max depth %d", maxDepth)
-			return validationSchemaNotExist
+
+	// 如果数据是nil，检查schema中是否有任何required字段
+	if isNil(data) {
+		if hasAnyRequired(schema, 0) {
+			return false
+		}
+		// 如果没有required字段，nil数据是有效的
+		return true
+	}
+
+	var dfs func(schema, data any, depth int, checkRequired bool) bool
+	dfs = func(schema, data any, depth int, checkRequired bool) bool {
+
+		if depth > maxRecursionDepth {
+			log.Printf("Warning: schema validation exceeded max depth %d", maxRecursionDepth)
+			return false
 		}
 
 		if isNil(schema) && isNil(data) {
-			return validationMatched
-		}
-		if !isNil(schema) && isNil(data) {
-			return validationDataNotExist
+			return true
 		}
 		if isNil(schema) && !isNil(data) {
-			return validationSchemaNotExist
+			return false
 		}
 
 		left, converted := schema.(map[string]any)
 		if !converted {
-			return validationSchemaNotExist
+			return false
 		}
 
 		schemaType, ok := left["type"].(string)
 		if !ok {
-			return validationSchemaNotExist
+			return false
 		}
 
 		switch schemaType {
 		case "string":
-			if _, ok := data.(string); !ok {
-				return validationTypeNotMatch
+			// 基本类型不接受nil
+			if isNil(data) {
+				return false
 			}
-			return validationMatched
+			if _, ok := data.(string); !ok {
+				return false
+			}
+			return true
 
 		case "number":
+			// 基本类型不接受nil
+			if isNil(data) {
+				return false
+			}
 			switch data.(type) {
 			case float64, float32, int, int64, int32, int16, int8, uint, uint64, uint32, uint16, uint8:
-				return validationMatched
+				return true
 			default:
-				return validationTypeNotMatch
+				return false
 			}
 
 		case "boolean":
-			if _, ok := data.(bool); !ok {
-				return validationTypeNotMatch
+			// 基本类型不接受nil
+			if isNil(data) {
+				return false
 			}
-			return validationMatched
+			if _, ok := data.(bool); !ok {
+				return false
+			}
+			return true
 
 		case "array":
+			// array类型可以接受nil（表示空数组）
+			if isNil(data) {
+				return true
+			}
+
 			// 使用反射支持所有类型的切片和数组
 			dataValue := reflect.ValueOf(data)
 			if dataValue.Kind() != reflect.Slice && dataValue.Kind() != reflect.Array {
-				return validationTypeNotMatch
+				return false
 			}
 			items, converted := left["items"].(map[string]any)
 			if !converted || items == nil {
-				return validationSchemaNotExist
+				return false
 			}
 
-			result := validationMatched
+			checked := false
 			for i := 0; i < dataValue.Len(); i++ {
 				item := dataValue.Index(i).Interface()
-				itemResult := dfs(items, item, depth+1)
-				if itemResult > result {
-					result = itemResult
+				if isNil(item) && checked {
+					continue
+				}
+				if !dfs(items, item, depth+1, checkRequired) {
+					return false
+				}
+				if isNil(item) {
+					checked = true
 				}
 			}
-			return result
+			return true
 
 		case "object":
 			properties, converted := left["properties"].(map[string]any)
 			if !converted || properties == nil {
-				return validationSchemaNotExist
+				return false
+			}
+
+			if isNil(data) {
+				if checkRequired && hasAnyRequired(left, depth) {
+					return false
+				}
+				return true
 			}
 
 			// 使用反射支持所有类型的map
 			dataValue := reflect.ValueOf(data)
 			if dataValue.Kind() != reflect.Map {
-				return validationTypeNotMatch
+				return false
+			}
+			// 检查map是否为nil
+			if dataValue.IsNil() {
+				// nil map无法包含任何字段，递归检查整个schema树中是否存在任何required字段
+				if checkRequired && hasAnyRequired(left, depth) {
+					return false
+				}
+				return true
 			}
 
 			// 处理required字段
@@ -394,7 +463,7 @@ func SatisfySchema(schema map[string]any, data any) bool {
 				mapValue := dataValue.MapIndex(mapKey)
 				if !mapValue.IsValid() {
 					// 必填字段不存在
-					return validationTypeNotMatch
+					return false
 				}
 			}
 
@@ -414,36 +483,29 @@ func SatisfySchema(schema map[string]any, data any) bool {
 				}
 
 				// 递归验证字段
-				var fieldResult int
+				var fieldResult bool
 				if mapValue.IsValid() {
-					fieldResult = dfs(prop, mapValue.Interface(), depth+1)
+					// 检查值是否为nil（针对map、slice、pointer等可为nil的类型）
+					fieldValue := mapValue.Interface()
+					fieldResult = dfs(prop, fieldValue, depth+1, checkRequired)
 				} else {
-					fieldResult = dfs(prop, nil, depth+1)
+					fieldResult = dfs(prop, nil, depth+1, checkRequired)
 				}
 
-				// 任何类型不匹配都应该返回错误
-				if fieldResult == validationTypeNotMatch {
-					return validationTypeNotMatch
-				}
-
-				// 如果字段存在但数据为nil，且该字段是必填的
-				if fieldResult == validationDataNotExist && requiredMap[key] {
-					return validationTypeNotMatch
+				// 如果验证失败，直接返回false
+				if !fieldResult {
+					return false
 				}
 			}
-			return validationMatched
+			return true
 
 		default:
-			return validationTypeNotMatch
+			return false
 		}
 	}
 
-	result := dfs(schema, data, 0)
-	// 使用debug级别日志,生产环境可以通过日志级别控制
-	if result != validationMatched {
-		log.Printf("SatisfySchema validation failed: result=%d, schema=%+v, data=%+v", result, schema, data)
-	}
-	return result == validationMatched
+	result := dfs(schema, data, 0, true)
+	return result
 }
 
 func FilterDataBySchema(schema map[string]any, data any) any {

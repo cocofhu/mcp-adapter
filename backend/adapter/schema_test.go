@@ -307,6 +307,169 @@ func TestSatisfySchema_ArrayTypes(t *testing.T) {
 			},
 			expected: true,
 		},
+		{
+			name: "array of numbers with null - should fail",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"scores": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "number",
+						},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"scores": []any{22.0, nil, 23.0},
+			},
+			expected: false, // 数组元素nil不满足number类型（基本类型不接受nil），应该验证失败
+		},
+		{
+			name: "array of objects with null - should be valid",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"items": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"id": map[string]any{
+									"type": "number",
+								},
+							},
+							"required": []any{},
+						},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"items": []any{
+					map[string]any{"id": 1.0},
+					nil, // object类型可以接受nil（表示空对象）
+					map[string]any{"id": 2.0},
+				},
+			},
+			expected: true, // object类型可以为nil，应该验证成功
+		},
+		{
+			name: "array of strings with null - should fail",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"tags": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "string",
+						},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"tags": []any{"hello", nil, "world"},
+			},
+			expected: false, // 数组元素nil不满足string类型（基本类型不接受nil），应该验证失败
+		},
+		{
+			name: "array of arrays with null - should be valid",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"matrix": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type": "number",
+							},
+						},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"matrix": []any{
+					[]any{1.0, 2.0},
+					nil, // array类型可以接受nil（表示空数组）
+					[]any{3.0, 4.0},
+				},
+			},
+			expected: true, // array类型可以为nil，应该验证成功
+		},
+		{
+			name: "array of objects with required field and null - should fail",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"users": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"name": map[string]any{
+									"type": "string",
+								},
+							},
+							"required": []any{"name"}, // name是必填字段
+						},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"users": []any{
+					map[string]any{"name": "Alice"},
+					nil, // nil对象无法满足required字段
+					map[string]any{"name": "Bob"},
+				},
+			},
+			expected: false, // nil对象有required字段，应该验证失败
+		},
+		{
+			name: "nil array field - should be valid",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"tags": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "string",
+						},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"tags": nil, // array类型的字段可以为nil
+			},
+			expected: true,
+		},
+		{
+			name: "nil object field - should be valid",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"user": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"name": map[string]any{
+								"type": "string",
+							},
+						},
+						"required": []any{},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"user": nil, // object类型的字段可以为nil
+			},
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1397,6 +1560,240 @@ func TestSatisfySchema_ReflectionMapTypes(t *testing.T) {
 				"user": "not a map",
 			},
 			expected: false,
+		},
+		{
+			name: "nil map - no required fields",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"metadata": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"key": map[string]any{
+								"type": "string",
+							},
+						},
+						"required": []any{},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"metadata": (map[string]string)(nil),
+			},
+			expected: true,
+		},
+		{
+			name: "nil map - with required fields",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"metadata": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"key": map[string]any{
+								"type": "string",
+							},
+						},
+						"required": []any{"key"},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"metadata": (map[string]string)(nil),
+			},
+			expected: false,
+		},
+		{
+			name: "empty map - no required fields",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"config": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"timeout": map[string]any{
+								"type": "number",
+							},
+							"retries": map[string]any{
+								"type": "number",
+							},
+						},
+						"required": []any{},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"config": map[string]int{},
+			},
+			expected: true,
+		},
+		{
+			name: "empty map - with required fields",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"config": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"timeout": map[string]any{
+								"type": "number",
+							},
+							"retries": map[string]any{
+								"type": "number",
+							},
+						},
+						"required": []any{"timeout"},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"config": map[string]int{},
+			},
+			expected: false,
+		},
+		{
+			name: "empty map[string]interface{} - no required fields",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"settings": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"enabled": map[string]any{
+								"type": "boolean",
+							},
+						},
+						"required": []any{},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"settings": map[string]interface{}{},
+			},
+			expected: true,
+		},
+		{
+			name: "empty map[string]interface{} - with required fields",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"settings": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"enabled": map[string]any{
+								"type": "boolean",
+							},
+						},
+						"required": []any{"enabled"},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"settings": map[string]interface{}{},
+			},
+			expected: false,
+		},
+		{
+			name: "map with zero value number (0) - should be valid",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"stats": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"count": map[string]any{
+								"type": "number",
+							},
+						},
+						"required": []any{"count"},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"stats": map[string]int{
+					"count": 0, // 数字0是有效值，key存在
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "map with zero value string - should be valid",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"user": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"name": map[string]any{
+								"type": "string",
+							},
+						},
+						"required": []any{"name"},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"user": map[string]string{
+					"name": "", // 空字符串是有效值，key存在
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "map with zero value boolean (false) - should be valid",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"flags": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"enabled": map[string]any{
+								"type": "boolean",
+							},
+						},
+						"required": []any{"enabled"},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"flags": map[string]bool{
+					"enabled": false, // false是有效值，key存在
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "map with zero value float (0.0) - should be valid",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"metrics": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"score": map[string]any{
+								"type": "number",
+							},
+						},
+						"required": []any{"score"},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"metrics": map[string]float64{
+					"score": 0.0, // 0.0是有效值，key存在
+				},
+			},
+			expected: true,
 		},
 	}
 
@@ -3691,4 +4088,437 @@ func TestBuildMcpOutputSchemaByInterface_Logic(t *testing.T) {
 		}
 		// 无论是否有错误，测试都通过，因为我们只是验证函数可以被调用
 	})
+}
+
+// TestSatisfySchema_NestedCustomTypeWithRequired 测试嵌套自定义类型中的required字段验证
+func TestSatisfySchema_NestedCustomTypeWithRequired(t *testing.T) {
+	tests := []struct {
+		name     string
+		schema   map[string]any
+		data     any
+		expected bool
+	}{
+		{
+			name: "nil data with nested required field - should fail",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"user": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"profile": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"name": map[string]any{
+										"type": "string",
+									},
+								},
+								"required": []any{"name"}, // 内层有required字段
+							},
+						},
+						"required": []any{}, // 外层没有required字段
+					},
+				},
+				"required": []any{}, // 最外层没有required字段
+			},
+			data:     nil,
+			expected: false, // nil数据不能满足内层的required字段
+		},
+		{
+			name: "nil data with deeply nested required field - should fail",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"level1": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"level2": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"level3": map[string]any{
+										"type": "object",
+										"properties": map[string]any{
+											"requiredField": map[string]any{
+												"type": "string",
+											},
+										},
+										"required": []any{"requiredField"}, // 深层嵌套的required字段
+									},
+								},
+								"required": []any{},
+							},
+						},
+						"required": []any{},
+					},
+				},
+				"required": []any{},
+			},
+			data:     nil,
+			expected: false, // nil数据不能满足深层嵌套的required字段
+		},
+		{
+			name: "nil data with no nested required fields - should pass",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"user": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"profile": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"name": map[string]any{
+										"type": "string",
+									},
+								},
+								"required": []any{}, // 内层也没有required字段
+							},
+						},
+						"required": []any{},
+					},
+				},
+				"required": []any{},
+			},
+			data:     nil,
+			expected: true, // 所有层级都没有required字段，nil数据是有效的
+		},
+		{
+			name: "empty object with nested required field - should fail",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"user": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"profile": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"name": map[string]any{
+										"type": "string",
+									},
+								},
+								"required": []any{"name"},
+							},
+						},
+						"required": []any{},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"user": map[string]any{
+					"profile": map[string]any{}, // 空对象，缺少required字段
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "partial object with nested required field missing - should fail",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"user": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"id": map[string]any{
+								"type": "number",
+							},
+							"profile": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"name": map[string]any{
+										"type": "string",
+									},
+									"age": map[string]any{
+										"type": "number",
+									},
+								},
+								"required": []any{"name"}, // profile.name是必填的
+							},
+						},
+						"required": []any{},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"user": map[string]any{
+					"id": 123.0,
+					"profile": map[string]any{
+						"age": 25.0, // 只有age，缺少必填的name
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "complete nested object with all required fields - should pass",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"user": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"id": map[string]any{
+								"type": "number",
+							},
+							"profile": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"name": map[string]any{
+										"type": "string",
+									},
+									"age": map[string]any{
+										"type": "number",
+									},
+								},
+								"required": []any{"name"},
+							},
+						},
+						"required": []any{},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"user": map[string]any{
+					"id": 123.0,
+					"profile": map[string]any{
+						"name": "John",
+						"age":  25.0,
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "nil nested object with required field in that level - should fail",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"user": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"profile": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"name": map[string]any{
+										"type": "string",
+									},
+								},
+								"required": []any{"name"},
+							},
+						},
+						"required": []any{},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"user": map[string]any{
+					"profile": nil, // profile是nil，但它有required字段
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "array of nested objects with required fields - all valid",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"users": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"name": map[string]any{
+									"type": "string",
+								},
+								"email": map[string]any{
+									"type": "string",
+								},
+							},
+							"required": []any{"name", "email"},
+						},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"users": []any{
+					map[string]any{
+						"name":  "Alice",
+						"email": "alice@example.com",
+					},
+					map[string]any{
+						"name":  "Bob",
+						"email": "bob@example.com",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "array of nested objects with required fields - one missing",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"users": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"name": map[string]any{
+									"type": "string",
+								},
+								"email": map[string]any{
+									"type": "string",
+								},
+							},
+							"required": []any{"name", "email"},
+						},
+					},
+				},
+				"required": []any{},
+			},
+			data: map[string]any{
+				"users": []any{
+					map[string]any{
+						"name":  "Alice",
+						"email": "alice@example.com",
+					},
+					map[string]any{
+						"name": "Bob",
+						// email缺失
+					},
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SatisfySchema(tt.schema, tt.data)
+			if result != tt.expected {
+				t.Errorf("SatisfySchema() = %v, want %v\nschema: %+v\ndata: %+v",
+					result, tt.expected, tt.schema, tt.data)
+			}
+		})
+	}
+}
+
+// TestSatisfySchema_CacheHit 测试缓存命中场景
+// 通过共享同一个子schema对象，触发缓存机制
+func TestSatisfySchema_CacheHit(t *testing.T) {
+	// 创建一个共享的子schema对象（带有required字段）
+	sharedAddressSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"street": map[string]any{
+				"type": "string",
+			},
+			"city": map[string]any{
+				"type": "string",
+			},
+			"zipcode": map[string]any{
+				"type": "string",
+			},
+		},
+		"required": []string{"street", "city"}, // 有required字段
+	}
+
+	// 创建schema，多个属性引用同一个子schema对象
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"homeAddress":    sharedAddressSchema, // 引用1
+			"workAddress":    sharedAddressSchema, // 引用2（相同指针）
+			"billingAddress": sharedAddressSchema, // 引用3（相同指针）
+			"name": map[string]any{
+				"type": "string",
+			},
+		},
+	}
+
+	// 测试数据：所有地址字段都为nil
+	// 这会触发多次检查sharedAddressSchema是否有required字段
+	// 第一次会计算并缓存，后续会命中缓存
+	data := map[string]any{
+		"homeAddress":    nil,
+		"workAddress":    nil,
+		"billingAddress": nil,
+		"name":           "John",
+	}
+
+	// 执行验证
+	// 预期：因为地址字段都是nil，但sharedAddressSchema有required字段，所以应该返回false
+	result := SatisfySchema(schema, data)
+
+	// 验证结果
+	if result != false {
+		t.Errorf("Expected false (nil data with required fields), got %v", result)
+	}
+
+	t.Log("Test completed. Check logs for 'cache hit' messages.")
+	t.Log("Expected to see 2 cache hits (first access caches, next 2 accesses hit cache)")
+}
+
+// TestSatisfySchema_CacheHit_ValidData 测试缓存命中场景（有效数据）
+func TestSatisfySchema_CacheHit_ValidData(t *testing.T) {
+	// 创建一个共享的子schema对象
+	sharedPersonSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type": "string",
+			},
+			"age": map[string]any{
+				"type": "number",
+			},
+		},
+		"required": []string{"name"},
+	}
+
+	// 创建schema，多个属性引用同一个子schema对象
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"owner":     sharedPersonSchema, // 引用1
+			"manager":   sharedPersonSchema, // 引用2（相同指针）
+			"developer": sharedPersonSchema, // 引用3（相同指针）
+			"tester":    sharedPersonSchema, // 引用4（相同指针）
+		},
+	}
+
+	// 测试数据：提供有效数据
+	data := map[string]any{
+		"owner": map[string]any{
+			"name": "Alice",
+			"age":  30,
+		},
+		"manager": map[string]any{
+			"name": "Bob",
+			"age":  35,
+		},
+		"developer": map[string]any{
+			"name": "Charlie",
+			"age":  28,
+		},
+		"tester": map[string]any{
+			"name": "David",
+			"age":  26,
+		},
+	}
+
+	// 执行验证
+	result := SatisfySchema(schema, data)
+
+	// 验证结果
+	if result != true {
+		t.Errorf("Expected true (valid data), got %v", result)
+	}
+
+	t.Log("Test completed. Check logs for 'cache hit' messages.")
+	t.Log("Expected to see 3 cache hits when validating nested objects")
 }
