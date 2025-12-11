@@ -335,11 +335,8 @@ func SatisfySchema(schema map[string]any, data any) bool {
 			return false
 		}
 
-		if isNil(schema) && isNil(data) {
+		if isNil(schema) {
 			return true
-		}
-		if isNil(schema) && !isNil(data) {
-			return false
 		}
 
 		left, converted := schema.(map[string]any)
@@ -504,8 +501,7 @@ func SatisfySchema(schema map[string]any, data any) bool {
 		}
 	}
 
-	result := dfs(schema, data, 0, true)
-	return result
+	return dfs(schema, data, 0, true)
 }
 
 func FilterDataBySchema(schema map[string]any, data any) any {
