@@ -264,6 +264,15 @@
                             </select>
                         </div>
                         <div class="form-group">
+                            <label>PostProcess 配置 (JSON)</label>
+                            <textarea id="interface-post-process" rows="6" placeholder='示例: {"truncate_fields": {"data.result": 200}, "structured_output": true}'></textarea>
+                            <small class="text-muted">
+                                使用 JSON 配置接口的后处理行为：
+                                <code>truncate_fields</code> 为需截断的字段路径及长度（支持嵌套和 * 通配符），
+                                <code>structured_output</code> 为是否启用结构化输出校验。
+                            </small>
+                        </div>
+                        <div class="form-group">
                             <label>参数定义</label>
                             <div class="params-tabs">
                                 <div class="params-tab-header">

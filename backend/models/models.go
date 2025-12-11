@@ -52,13 +52,14 @@ type CustomType struct {
 // CustomTypeField 自定义类型的字段定义
 type CustomTypeField struct {
 	ID           int64          `json:"id" gorm:"primaryKey"`
-	CustomTypeID int64          `json:"custom_type_id" gorm:"not null;index"`               // 所属类型ID
-	Name         string         `json:"name" gorm:"not null;size:255" validate:"required"`  // 字段名
-	Type         string         `json:"type" validate:"oneof=number string boolean custom"` // 字段类型
-	Ref          *int64         `json:"ref"`                                                // 如果是 custom 类型，引用 CustomType.ID
-	IsArray      bool           `json:"is_array"`                                           // 是否数组
-	Required     bool           `json:"required"`                                           // 该字段是否必填
-	Description  string         `json:"description" gorm:"type:text"`                       // 字段描述
+	AppID        int64          `json:"app_id" gorm:"not null;index;default:0" validate:"required"` // 应用ID，用于优化查询
+	CustomTypeID int64          `json:"custom_type_id" gorm:"not null;index"`                       // 所属类型ID
+	Name         string         `json:"name" gorm:"not null;size:255" validate:"required"`          // 字段名
+	Type         string         `json:"type" validate:"oneof=number string boolean custom"`         // 字段类型
+	Ref          *int64         `json:"ref"`                                                        // 如果是 custom 类型，引用 CustomType.ID
+	IsArray      bool           `json:"is_array"`                                                   // 是否数组
+	Required     bool           `json:"required"`                                                   // 该字段是否必填
+	Description  string         `json:"description" gorm:"type:text"`                               // 字段描述
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`

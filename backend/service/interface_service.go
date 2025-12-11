@@ -50,7 +50,7 @@ type UpdateInterfaceRequest struct {
 	Protocol    *string                        `json:"protocol,omitempty" validate:"omitempty,oneof=http"`                                 // 协议类型
 	URL         *string                        `json:"url,omitempty" validate:"omitempty,max=1024"`                                        // 接口 URL
 	Method      *string                        `json:"method,omitempty" validate:"omitempty,oneof=GET POST PUT DELETE PATCH HEAD OPTIONS"` // HTTP 方法
-	AuthType    *string                        `json:"auth_type,omitempty" validate:"omitempty,oneof=none capi"`               // 鉴权类型
+	AuthType    *string                        `json:"auth_type,omitempty" validate:"omitempty,oneof=none capi"`                           // 鉴权类型
 	Enabled     *bool                          `json:"enabled,omitempty"`                                                                  // 是否启用
 	PostProcess *string                        `json:"post_process,omitempty" validate:"omitempty,max=1048576"`                            // 后置处理脚本
 	Parameters  *[]CreateInterfaceParameterReq `json:"parameters,omitempty"`                                                               // 如果提供，则完全替换参数列表
@@ -424,9 +424,9 @@ func checkParameters(parameters *[]CreateInterfaceParameterReq, tx *gorm.DB, app
 						return errors.New("default value does not match parameter type 'number'")
 					}
 				case "boolean":
-					var b bool
-					_, err := fmt.Sscanf(*paramReq.DefaultValue, "%t", &b)
-					if err != nil {
+					// 严格验证布尔值：只接受 true, false
+					val := *paramReq.DefaultValue
+					if val != "true" && val != "false" {
 						return errors.New("default value does not match parameter type 'boolean'")
 					}
 				case "string":

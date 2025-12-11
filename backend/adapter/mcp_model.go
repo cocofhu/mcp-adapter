@@ -71,6 +71,11 @@ type RequestMeta struct {
 	Ext      map[string]string
 }
 
+type PostProcessMeta struct {
+	TruncateFields   map[string]int `json:"truncate_fields"`
+	StructuredOutput bool           `json:"structured_output"`
+}
+
 // AddCleanup 添加清理函数
 func (s *Server) AddCleanup(fn func()) {
 	s.mu.Lock()
@@ -166,8 +171,13 @@ func InitServer() {
 		// 初始化 maxEventID：从数据库获取当前最大事件ID
 		db := database.GetDB()
 		var maxID int64
-		if err := db.Model(&models.EventLog{}).Select("COALESCE(MAX(id), 0)").Scan(&maxID).Error; err != nil {
-			log.Printf("Warning: Failed to get max event ID, starting from 0: %v", err)
+		if db != nil {
+			if err := db.Model(&models.EventLog{}).Select("COALESCE(MAX(id), 0)").Scan(&maxID).Error; err != nil {
+				log.Printf("Warning: Failed to get max event ID, starting from 0: %v", err)
+				maxID = 0
+			}
+		} else {
+			log.Println("Warning: Database not initialized, starting maxEventID from 0")
 			maxID = 0
 		}
 		serverManager.maxEventID = maxID
@@ -323,6 +333,9 @@ func Shutdown() {
 	// 清理所有服务器
 	serverManager.cleanupAllServers()
 
+	serverManager = nil
+	initOnce = sync.Once{}
+
 	log.Println("ServerManager shutdown completed")
 }
 
@@ -389,26 +402,41 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 		log.Printf("Input schema for tool %s: %s", iface.Name, string(marshal))
 		newTool := mcp.NewToolWithRawSchema(iface.Name, iface.Description, marshal)
 
-		var outputSchema map[string]any
-		shouldStructuredOutput := false
-		if len(outputs) > 0 {
-			outputSchema, err = BuildMcpOutputSchemaByInterface(iface.ID)
-			if err != nil {
-				return err
+		postProcessMeta := PostProcessMeta{
+			TruncateFields:   make(map[string]int),
+			StructuredOutput: false,
+		}
+		if iface.PostProcess != "" {
+			if err := json.Unmarshal([]byte(iface.PostProcess), &postProcessMeta); err != nil {
+				log.Printf("Error unmarshalling post process meta: %v, tool id %d", err, iface.ID)
 			}
-			marshal, err = json.Marshal(outputSchema)
-			if err != nil {
-				return err
-			}
-			newTool.RawOutputSchema = marshal
-			shouldStructuredOutput = true
+			log.Printf("Post process meta for tool %s: %+v", iface.Name, postProcessMeta)
 		}
 
+		var outputSchema map[string]any
+		if postProcessMeta.StructuredOutput {
+			if len(outputs) > 0 {
+				outputSchema, err = BuildMcpOutputSchemaByInterface(iface.ID)
+				if err != nil {
+					return err
+				}
+				marshal, err = json.Marshal(outputSchema)
+				if err != nil {
+					return err
+				}
+				newTool.RawOutputSchema = marshal
+				log.Printf("Output schema for tool %s: %s", iface.Name, string(marshal))
+			} else {
+				log.Printf("Disabling structured output for tool %s due to no output parameters defined", iface.Name)
+				postProcessMeta.StructuredOutput = false
+			}
+		}
 		// 创建参数副本，缓存参数信息避免在调用时查库
 		paramsCopy := make([]models.InterfaceParameter, len(params))
 		copy(paramsCopy, params)
 		// 创建 outputSchema 的副本
 		outputSchemaCopy := outputSchema
+		inputSchemaCopy := schema
 		meta := RequestMeta{
 			URL:      iface.URL,
 			Method:   iface.Method,
@@ -418,10 +446,15 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 		}
 		srv.server.AddTool(newTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 
-			finalParams, err := RearrangeParametersAndValidate(req.GetArguments(), paramsCopy)
+			if ok := SatisfySchema(inputSchemaCopy, req.GetArguments()); !ok {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid input schema: %v", err)), nil
+			}
+
+			finalParams, err := rearrangeParametersAndValidate(req.GetArguments(), paramsCopy)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
+
 			var handle RequestHandle = nil
 			for _, h := range sm.handles {
 				if h.Compatible(meta) {
@@ -433,17 +466,32 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 				return mcp.NewToolResultError(fmt.Sprintf("no compatible handle found for tool %s", iface.Name)), nil
 			}
 			data, err := handle.DoRequest(ctx, req, *finalParams, meta)
-
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			if shouldStructuredOutput {
-				out, _, err := parseStructuredOutput(data, outputSchemaCopy)
+			// 后处理：截取字段
+			for key, length := range postProcessMeta.TruncateFields {
+				bytes, err := truncate(key, length, data)
 				if err != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("failed to parse structured output: %v", err)), nil
+					log.Printf("Error truncating field %s for tool %s: %v", key, iface.Name, err)
+				} else {
+					data = bytes
 				}
-				filtered := filterOutputBySchema(out, outputSchemaCopy)
+			}
+
+			if postProcessMeta.StructuredOutput {
+				// 解析 JSON 数据
+				var result any
+				if err := json.Unmarshal(data, &result); err != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("failed to parse JSON: %v", err)), nil
+				}
+				// 使用 SatisfySchema 进行验证
+				if !SatisfySchema(outputSchemaCopy, result) {
+					return mcp.NewToolResultError("output does not satisfy schema"), nil
+				}
+				// 过滤数据以匹配 schema
+				filtered := FilterDataBySchema(outputSchemaCopy, result)
 				bytes, err := json.Marshal(filtered)
 				if err != nil {
 					return mcp.NewToolResultError(fmt.Sprintf("failed to marshal filtered output: %v", err)), nil
@@ -460,140 +508,153 @@ func (sm *ServerManager) addTool(iface *models.Interface, app *models.Applicatio
 	return fmt.Errorf("application %s not found for tool %s", app.Name, iface.Name)
 }
 
-// parseStructuredOutput 解析结构化输出，支持对象、数组和双重编码的 JSON 字符串
-func parseStructuredOutput(data []byte, outputSchema map[string]any) (map[string]any, string, error) {
-	// 首先尝试解析为通用类型
-	var genericData any
-	if err := json.Unmarshal(data, &genericData); err != nil {
-		return nil, "", fmt.Errorf("invalid JSON: %v", err)
+func truncateByPath(data any, path []string, length int) any {
+	if len(path) == 0 {
+		return data
+	}
+	// 处理 map 类型
+	if m, ok := data.(map[string]any); ok {
+		result := make(map[string]any)
+		if path[0] == "*" {
+			// 通配符：处理所有 key
+			for k, v := range m {
+				if len(path) == 1 {
+					// 最后一层
+					if length == 0 {
+						// length 为 0 时删除字段
+						continue
+					}
+					// 只对字符串类型进行截断
+					if str, ok := v.(string); ok {
+						runes := []rune(str)
+						if len(runes) > length {
+							result[k] = string(runes[:length]) + "..."
+						} else {
+							result[k] = v
+						}
+					} else {
+						result[k] = v
+					}
+				} else {
+					// 继续递归
+					result[k] = truncateByPath(v, path[1:], length)
+				}
+			}
+		} else {
+			// 指定 key
+			targetKey := path[0]
+			for k, v := range m {
+				if k == targetKey {
+					if len(path) == 1 {
+						// 最后一层
+						if length == 0 {
+							// length 为 0 时删除字段
+							continue
+						}
+						// 只对字符串类型进行截断
+						if str, ok := v.(string); ok {
+							runes := []rune(str)
+							if len(runes) > length {
+								result[k] = string(runes[:length]) + "..."
+							} else {
+								result[k] = v
+							}
+						} else {
+							result[k] = v
+						}
+					} else {
+						// 继续递归
+						result[k] = truncateByPath(v, path[1:], length)
+					}
+				} else {
+					result[k] = v
+				}
+			}
+		}
+		return result
 	}
 
-	// 检查解析结果的类型
-	switch v := genericData.(type) {
-	case map[string]any:
-		// 直接是对象，返回
-		return v, string(data), nil
-
-	case []any:
-		// 是数组，需要包装成对象
-		// 检查 schema 的顶层 type，如果是 array，则包装；否则报错
-		schemaType, _ := outputSchema["type"].(string)
-		if schemaType == "array" {
-			// schema 定义的就是数组类型，包装为 { "items": [...] }
-			wrapped := map[string]any{"items": v}
-			return wrapped, string(data), nil
-		}
-		// 如果 schema 不是 array，尝试查找第一个是 array 类型的属性
-		if properties, ok := outputSchema["properties"].(map[string]any); ok {
-			for key, propSchema := range properties {
-				if propSchemaMap, ok := propSchema.(map[string]any); ok {
-					if propType, _ := propSchemaMap["type"].(string); propType == "array" {
-						// 找到了数组类型的属性，使用该属性名包装
-						wrapped := map[string]any{key: v}
-						return wrapped, string(data), nil
+	// 处理 slice 类型
+	if arr, ok := data.([]any); ok {
+		result := make([]any, 0, len(arr))
+		if path[0] == "*" {
+			for _, v := range arr {
+				if len(path) == 1 {
+					// 最后一层
+					if length == 0 {
+						// length 为 0 时删除元素
+						continue
+					}
+					// 只对字符串类型进行截断
+					if str, ok := v.(string); ok {
+						runes := []rune(str)
+						if len(runes) > length {
+							result = append(result, string(runes[:length])+"...")
+						} else {
+							result = append(result, v)
+						}
+					} else {
+						result = append(result, v)
+					}
+				} else {
+					result = append(result, truncateByPath(v, path[1:], length))
+				}
+			}
+		} else {
+			index, err := strconv.Atoi(path[0])
+			if err == nil && index >= 0 && index < len(arr) {
+				for i, v := range arr {
+					if i == index {
+						if len(path) == 1 {
+							// 最后一层
+							if length == 0 {
+								// length 为 0 时删除元素
+								continue
+							}
+							// 只对字符串类型进行截断
+							if str, ok := v.(string); ok {
+								runes := []rune(str)
+								if len(runes) > length {
+									result = append(result, string(runes[:length])+"...")
+								} else {
+									result = append(result, v)
+								}
+							} else {
+								result = append(result, v)
+							}
+						} else {
+							result = append(result, truncateByPath(v, path[1:], length))
+						}
+					} else {
+						result = append(result, v)
 					}
 				}
+			} else {
+				result = append(result, arr...)
 			}
 		}
-		// 都不是，使用默认的 "items" 包装
-		wrapped := map[string]any{"items": v}
-		return wrapped, string(data), nil
-
-	case string:
-		// 可能是双重编码的 JSON 字符串
-		var out map[string]any
-		if err := json.Unmarshal([]byte(v), &out); err != nil {
-			// 尝试解析为数组
-			var arrData []any
-			if err2 := json.Unmarshal([]byte(v), &arrData); err2 == nil {
-				wrapped := map[string]any{"items": arrData}
-				return wrapped, v, nil
-			}
-			return nil, "", fmt.Errorf("failed to parse inner JSON string: %v", err)
-		}
-		return out, v, nil
-
-	default:
-		return nil, "", fmt.Errorf("unsupported JSON type: %T", genericData)
+		return result
 	}
+	// 其他类型直接返回
+	return data
 }
 
-// filterOutputBySchema 根据 outputSchema 过滤输出，只保留 schema 中定义的字段（递归处理）
-func filterOutputBySchema(out map[string]any, outputSchema map[string]any) map[string]any {
-	if outputSchema == nil {
-		return out
+func truncate(key string, length int, data []byte) ([]byte, error) {
+	var result any
+	if err := json.Unmarshal(data, &result); err != nil {
+		return data, fmt.Errorf("failed to parse JSON: %v", err)
 	}
-
-	// 获取 schema 中的 properties
-	properties, ok := outputSchema["properties"].(map[string]any)
-	if !ok || properties == nil {
-		return out
+	keys := strings.Split(key, ".")
+	result = truncateByPath(result, keys, length)
+	newData, err := json.Marshal(result)
+	if err != nil {
+		return data, fmt.Errorf("failed to marshal JSON: %v", err)
 	}
-
-	// 创建过滤后的结果
-	filtered := make(map[string]any)
-	for key, propSchema := range properties {
-		if value, exists := out[key]; exists {
-			// 递归处理复杂类型
-			filtered[key] = filterValueBySchema(value, propSchema)
-		}
-	}
-
-	return filtered
+	return newData, nil
 }
 
-// filterValueBySchema 根据 schema 过滤单个值（递归处理对象和数组）
-func filterValueBySchema(value any, schema any) any {
-	schemaMap, ok := schema.(map[string]any)
-	if !ok {
-		return value
-	}
-
-	// 检查 schema 是否有嵌套的 properties（不依赖 type 字段）
-	if properties, ok := schemaMap["properties"].(map[string]any); ok {
-		// 如果 properties 本身又有 properties，说明有多层嵌套
-		if _, hasNested := properties["properties"].(map[string]any); hasNested {
-			// 递归处理，使用内层的 properties 作为真正的 schema
-			return filterValueBySchema(value, properties)
-		}
-
-		// 正常的对象类型，使用 properties 过滤
-		if valueMap, ok := value.(map[string]any); ok {
-			filtered := make(map[string]any)
-			for key, propSchema := range properties {
-				if v, exists := valueMap[key]; exists {
-					filtered[key] = filterValueBySchema(v, propSchema)
-				}
-			}
-			return filtered
-		}
-		return value
-	}
-
-	schemaType, _ := schemaMap["type"].(string)
-	switch schemaType {
-	case "array":
-		// 处理数组
-		if valueSlice, ok := value.([]any); ok {
-			items, hasItems := schemaMap["items"]
-			if hasItems {
-				filtered := make([]any, len(valueSlice))
-				for i, item := range valueSlice {
-					filtered[i] = filterValueBySchema(item, items)
-				}
-				return filtered
-			}
-		}
-		return value
-
-	default:
-		// 基础类型或无法识别的类型直接返回
-		return value
-	}
-}
-
-// RearrangeParametersAndValidate 应用默认值并验证参数
-func RearrangeParametersAndValidate(rawParams map[string]any, params []models.InterfaceParameter) (*Parameters, error) {
+// rearrangeParametersAndValidate 应用默认值并验证参数
+func rearrangeParametersAndValidate(rawParams map[string]any, params []models.InterfaceParameter) (*Parameters, error) {
 
 	headerParams := make(map[string]any)
 	bodyParams := make(map[string]any)
@@ -776,6 +837,7 @@ func (sm *ServerManager) addApplication(app *models.Application) error {
 	})
 	// 存储服务器
 	sm.sseServers.Store(app.Path, srv)
+	log.Printf("Registering application: %s, protocol: %s, tools: %d, path: %s", app.Name, app.Protocol, len(interfaces), app.Path)
 	// 添加所有接口作为工具
 	for i := range interfaces {
 		if err := sm.addTool(&interfaces[i], app); err != nil {

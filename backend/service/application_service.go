@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"mcp-adapter/backend/adapter"
@@ -32,13 +33,13 @@ type ListApplicationsRequest struct{}
 
 type UpdateApplicationRequest struct {
 	ID          int64   `json:"id" validate:"required,gt=0"`
-	Name        *string `json:"name" validate:"required,max=128"`                  // 应用名称 不允许重复
-	Description *string `json:"description" validate:"max=16384"`                  // 应用描述
-	Path        *string `json:"path" validate:"required,max=128"`                  // 应用路径标识
-	Protocol    *string `json:"protocol" validate:"required,oneof=sse streamable"` // 应用暴露协议
-	PostProcess *string `json:"post_process" validate:"omitempty,max=1048576"`     // 应用后处理脚本
-	Environment *string `json:"environment" validate:"omitempty,max=1048576"`      // 应用环境变量
-	Enabled     *bool   `json:"enabled,omitempty"`                                 // 是否启用应用
+	Name        *string `json:"name" validate:"omitempty,max=128"`                  // 应用名称 不允许重复
+	Description *string `json:"description" validate:"omitempty,max=16384"`         // 应用描述
+	Path        *string `json:"path" validate:"omitempty,max=128"`                  // 应用路径标识
+	Protocol    *string `json:"protocol" validate:"omitempty,oneof=sse streamable"` // 应用暴露协议
+	PostProcess *string `json:"post_process" validate:"omitempty,max=1048576"`      // 应用后处理脚本
+	Environment *string `json:"environment" validate:"omitempty,max=1048576"`       // 应用环境变量
+	Enabled     *bool   `json:"enabled,omitempty"`                                  // 是否启用应用
 }
 
 type DeleteApplicationRequest struct {
@@ -66,11 +67,20 @@ type FixedInputDTO struct {
 	Value       any    `json:"value"`
 }
 
+type ToolMetaDTO struct {
+	URL      string `json:"url"`
+	Method   string `json:"method"`
+	AuthType string `json:"auth_type"`
+}
+
 type MCPToolDefinitionDTO struct {
-	Name        string          `json:"name"`
-	FixedInput  []FixedInputDTO `json:"fixed_input"`
-	InputSchema map[string]any  `json:"input_schema"`
-	Interfaces  InterfaceDTO    `json:"interfaces"`
+	Name         string                  `json:"name"`
+	Description  string                  `json:"description"`
+	FixedInput   []FixedInputDTO         `json:"fixed_input"`
+	InputSchema  map[string]any          `json:"input_schema"`
+	OutputSchema map[string]any          `json:"output_schema"`
+	PostProcess  adapter.PostProcessMeta `json:"post_process"`
+	ToolMeta     ToolMetaDTO             `json:"tool_meta"`
 }
 
 type ApplicationDetailResponse struct {
@@ -165,6 +175,10 @@ func GetApplication(req GetApplicationRequest) (ApplicationDetailResponse, error
 		if err != nil {
 			return ApplicationDetailResponse{}, err
 		}
+		outputSchema, err := adapter.BuildMcpOutputSchemaByInterface(iface.ID)
+		if err != nil {
+			return ApplicationDetailResponse{}, err
+		}
 		fixedInputs := make([]FixedInputDTO, 0)
 		for _, param := range iface.Parameters {
 			if param.Group != "fixed" {
@@ -187,11 +201,29 @@ func GetApplication(req GetApplicationRequest) (ApplicationDetailResponse, error
 				Location:    param.Location,
 			})
 		}
+		postProcessMeta := adapter.PostProcessMeta{
+			TruncateFields:   make(map[string]int),
+			StructuredOutput: false,
+		}
+		if iface.PostProcess != "" {
+			if err := json.Unmarshal([]byte(iface.PostProcess), &postProcessMeta); err != nil {
+				log.Printf("Error unmarshalling post process meta: %v, tool id %d", err, iface.ID)
+			}
+			log.Printf("Post process meta for tool %s: %+v", iface.Name, postProcessMeta)
+		}
+
 		toolDefinitions = append(toolDefinitions, MCPToolDefinitionDTO{
-			Name:        iface.Name,
-			FixedInput:  fixedInputs,
-			InputSchema: inputSchema,
-			Interfaces:  iface,
+			Name:         iface.Name,
+			Description:  iface.Description,
+			FixedInput:   fixedInputs,
+			InputSchema:  inputSchema,
+			OutputSchema: outputSchema,
+			PostProcess:  postProcessMeta,
+			ToolMeta: ToolMetaDTO{
+				URL:      iface.URL,
+				Method:   iface.Method,
+				AuthType: iface.AuthType,
+			},
 		})
 	}
 	return ApplicationDetailResponse{Application: toApplicationDTO(app), ToolDefinitions: toolDefinitions}, nil

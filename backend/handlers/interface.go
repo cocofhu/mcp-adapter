@@ -36,7 +36,7 @@ func GetInterfaces(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, resp.Interfaces)
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetInterface 获取单个接口
