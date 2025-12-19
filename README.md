@@ -1,22 +1,22 @@
 # MCP Adapter
 
-> 🚀 将任何 HTTP API 转换为 MCP (Model Context Protocol) 工具，让 AI 助手能够调用你的 API
+> 🚀 Transform any HTTP API into MCP (Model Context Protocol) tools, enabling AI assistants to call your APIs
 
-一个轻量级的 HTTP API 管理和适配系统，通过可视化界面配置 API，自动生成 MCP 工具定义，让 Claude Desktop 等 AI 助手能够直接调用你的 HTTP 接口。
+A lightweight HTTP API management and adaptation system that allows you to configure APIs through a visual interface, automatically generate MCP tool definitions, and enable AI assistants like Claude Desktop to directly call your HTTP endpoints.
 
-## ✨ 核心特性
+## ✨ Key Features
 
-- 🎯 **零代码配置** - 通过 Web 界面配置 API，无需编写代码
-- 🔌 **MCP 协议支持** - 自动将 HTTP API 转换为 MCP 工具
-- 🎨 **自定义类型系统** - 类似 TypeScript，定义可复用的复杂数据结构
-- 📦 **多应用管理** - 支持管理多个独立的 API 应用
-- 🌐 **现代化 UI** - 响应式设计，操作简单直观
+- 🎯 **Zero-Code Configuration** - Configure APIs through Web UI without writing code
+- 🔌 **MCP Protocol Support** - Automatically convert HTTP APIs to MCP tools
+- 🎨 **Custom Type System** - TypeScript-like system for defining reusable complex data structures
+- 📦 **Multi-Application Management** - Support for managing multiple independent API applications
+- 🌐 **Modern UI** - Responsive design with intuitive operations
 
 ## 🚀 Quick Start
 
-### 使用 Docker（推荐）
+### Using Docker (Recommended)
 
-一键启动，无需安装任何依赖：
+One-click start with no dependencies required:
 
 ```bash
 docker run -d \
@@ -31,78 +31,78 @@ Windows PowerShell:
 docker run -d -p 8080:8080 -v ${PWD}/data:/app/data --name mcp-adapter ccr.ccs.tencentyun.com/cocofhu/mcp-adapter
 ```
 
-启动后访问：**http://localhost:8080**
+After startup, visit: **http://localhost:8080**
 
-### 从源码运行
+### Running from Source
 
 ```bash
-# 克隆项目
+# Clone the project
 git clone https://github.com/yourusername/mcp-adapter.git
 cd mcp-adapter
 
-# 安装依赖
+# Install dependencies
 go mod download
 
-# 启动服务
+# Start the service
 go run main.go
 ```
 
-服务将在 `http://localhost:8080` 启动。
+The service will start at `http://localhost:8080`.
 
-## 📖 使用流程
+## 📖 Usage Workflow
 
-### 1️⃣ 创建应用
+### 1️⃣ Create an Application
 
-在 Web 界面中创建一个新应用，例如 "天气 API"。
+Create a new application in the Web interface, for example "Weather API".
 
-### 2️⃣ 定义自定义类型（可选）
+### 2️⃣ Define Custom Types (Optional)
 
-如果你的 API 使用复杂的数据结构，可以先定义自定义类型。
+If your API uses complex data structures, you can define custom types first.
 
-### 3️⃣ 配置 API 接口
+### 3️⃣ Configure API Endpoints
 
-添加你的 HTTP API 接口配置：
+Add your HTTP API endpoint configuration:
 
-- **接口名称**: GetWeather
+- **Endpoint Name**: GetWeather
 - **URL**: https://api.weather.com/current
-- **方法**: GET
-- **参数**: 
-  - city (string, query, 必填)
-  - units (string, query, 可选)
+- **Method**: GET
+- **Parameters**: 
+  - city (string, query, required)
+  - units (string, query, optional)
 
-### 4️⃣ 连接到 AI 助手
+### 4️⃣ Connect to AI Assistant
 
-配置 Claude Desktop 或其他 MCP 客户端，连接到：
+Configure Claude Desktop or other MCP clients to connect to:
 ```
 http://localhost:8080/mcp/your-app-path
 ```
 
-现在 AI 助手就可以调用你配置的 API 了！
+Now your AI assistant can call the configured APIs!
 
-## 🎯 使用场景
+## 🎯 Use Cases
 
-- 🤖 **AI 助手增强** - 让 Claude 等 AI 助手能够调用你的内部 API
-- 🔗 **API 聚合** - 将多个 API 统一管理和调用
-- 📝 **API 文档** - 可视化管理和展示 API 定义
-- 🧪 **快速原型** - 快速配置和测试 API 集成
+- 🤖 **AI Assistant Enhancement** - Enable Claude and other AI assistants to call your internal APIs
+- 🔗 **API Aggregation** - Unified management and invocation of multiple APIs
+- 📝 **API Documentation** - Visual management and display of API definitions
+- 🧪 **Rapid Prototyping** - Quick configuration and testing of API integrations
 
 
-## 🔧 配置说明
+## 🔧 Configuration
 
-### 环境变量
+### Environment Variables
 
-- `PORT` - 服务端口（默认: 8080）
-- `DB_TYPE` - 数据库类型：`sqlite` 或 `mysql`（默认: sqlite）
-- `DB_PATH` - SQLite 数据库文件路径（默认: ./data/mcp-adapter.db）
-- `DB_DSN` - MySQL 连接字符串（例如: `user:password@tcp(localhost:3306)/dbname?charset=utf8mb4&parseTime=True`）
+- `PORT` - Service port (default: 8080)
+- `DB_TYPE` - Database type: `sqlite` or `mysql` (default: sqlite)
+- `DB_PATH` - SQLite database file path (default: ./data/mcp-adapter.db)
+- `DB_DSN` - MySQL connection string (e.g.: `user:password@tcp(localhost:3306)/dbname?charset=utf8mb4&parseTime=True`)
 
-### 数据库支持
+### Database Support
 
-支持 **SQLite** 和 **MySQL** 两种数据库：
+Supports both **SQLite** and **MySQL** databases:
 
-#### 🗄️ SQLite（默认）
+#### 🗄️ SQLite (Default)
 
-零配置，开箱即用，适合中小规模使用：
+Zero configuration, ready to use, suitable for small to medium scale:
 
 ```bash
 docker run -d \
@@ -111,15 +111,15 @@ docker run -d \
   ccr.ccs.tencentyun.com/cocofhu/mcp-adapter
 ```
 
-**特点**：
-- ✅ 零配置，开箱即用
-- ✅ 轻量级，适合个人和小团队
-- ✅ 数据持久化，重启不丢失
-- ✅ 支持完整的 SQL 功能
+**Features**:
+- ✅ Zero configuration, ready to use
+- ✅ Lightweight, suitable for individuals and small teams
+- ✅ Data persistence, survives restarts
+- ✅ Full SQL functionality support
 
 #### 🐬 MySQL
 
-适合生产环境和大规模使用：
+Suitable for production environments and large-scale usage:
 
 ```bash
 docker run -d \
@@ -129,15 +129,15 @@ docker run -d \
   ccr.ccs.tencentyun.com/cocofhu/mcp-adapter
 ```
 
-**特点**：
-- ✅ 高性能，支持大规模并发
-- ✅ 适合生产环境和集群部署
-- ✅ 支持主从复制和高可用
-- ✅ 更好的数据安全性和备份能力
+**Features**:
+- ✅ High performance, supports large-scale concurrency
+- ✅ Suitable for production environments and cluster deployments
+- ✅ Supports master-slave replication and high availability
+- ✅ Better data security and backup capabilities
 
-### Docker 数据持久化
+### Docker Data Persistence
 
-**SQLite 模式**：使用 volume 挂载保存数据
+**SQLite Mode**: Use volume mount to save data
 
 ```bash
 docker run -d \
@@ -146,20 +146,20 @@ docker run -d \
   ccr.ccs.tencentyun.com/cocofhu/mcp-adapter
 ```
 
-**MySQL 模式**：数据存储在 MySQL 服务器中，无需挂载本地目录
+**MySQL Mode**: Data is stored in MySQL server, no local directory mount needed
 
-## 🛠️ 技术栈
+## 🛠️ Tech Stack
 
-- Go + Gin - 后端服务
-- SQLite - 数据存储
-- 原生 JavaScript - 前端界面
-- MCP Protocol - AI 助手协议
+- Go + Gin - Backend service
+- SQLite - Data storage
+- Vanilla JavaScript - Frontend interface
+- MCP Protocol - AI assistant protocol
 
-## 🤝 贡献
+## 🤝 Contributing
 
-欢迎提交 Issue 和 Pull Request！
+Issues and Pull Requests are welcome!
 
-## 📝 许可证
+## 📝 License
 
 MIT License
 
