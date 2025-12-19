@@ -1,319 +1,165 @@
-# MCP Adapter - HTTP 接口管理系统
+# MCP Adapter
 
-一个现代化的 HTTP/REST API 接口管理系统，支持自定义类型定义和 MCP (Model Context Protocol) 协议适配。
+> 🚀 将任何 HTTP API 转换为 MCP (Model Context Protocol) 工具，让 AI 助手能够调用你的 API
 
-## ✨ 功能特性
+一个轻量级的 HTTP API 管理和适配系统，通过可视化界面配置 API，自动生成 MCP 工具定义，让 Claude Desktop 等 AI 助手能够直接调用你的 HTTP 接口。
 
-### 🎨 自定义类型系统
-- **类型定义** - 创建可复用的自定义类型（类似 TypeScript interface）
-- **类型引用** - 字段可以引用其他自定义类型，构建复杂数据结构
-- **数组支持** - 任何类型都可以声明为数组（如 `string[]`、`User[]`）
-- **类型复用** - 在多个接口间共享类型定义
-- **引用完整性** - 自动检查类型引用的有效性，防止删除被引用的类型
-- **循环引用检测** - 使用拓扑排序算法自动检测并阻止循环引用 🆕
+## ✨ 核心特性
 
-### 🔌 接口管理
-- **多种 HTTP 方法** - 支持 GET、POST、PUT、DELETE、PATCH、HEAD、OPTIONS
-- **灵活参数配置** - 支持 query、header、body、path 四种参数位置
-- **参数类型** - 支持基本类型（number, string, boolean）和自定义类型
-- **数组参数** - 参数可以是数组类型
-- **默认值支持** - 为参数设置默认值
-- **必填验证** - 自动验证必填参数
+- 🎯 **零代码配置** - 通过 Web 界面配置 API，无需编写代码
+- 🔌 **MCP 协议支持** - 自动将 HTTP API 转换为 MCP 工具
+- 🎨 **自定义类型系统** - 类似 TypeScript，定义可复用的复杂数据结构
+- 📦 **多应用管理** - 支持管理多个独立的 API 应用
+- 🌐 **现代化 UI** - 响应式设计，操作简单直观
 
-### 📋 应用管理
-- **多应用支持** - 管理多个独立的应用
-- **MCP 协议** - 支持 SSE (Server-Sent Events) 协议
-- **应用隔离** - 每个应用有独立的接口和类型定义
+## 🚀 Quick Start
 
-### ⚙️ 高级特性
-- **事务支持** - 保证数据一致性
-- **批量查询优化** - 避免 N+1 查询问题
-- **引用检查** - 防止删除被引用的类型
-- **数据验证** - 完整的输入验证
-- **现代化 UI** - 响应式设计，支持移动端
+### 使用 Docker（推荐）
 
-## 🚀 快速开始
-
-### 安装依赖
+一键启动，无需安装任何依赖：
 
 ```bash
-go mod download
+docker run -d \
+  -p 8080:8080 \
+  -v $(pwd)/data:/app/data \
+  --name mcp-adapter \
+  ccr.ccs.tencentyun.com/cocofhu/mcp-adapter
 ```
 
-### 启动服务
+Windows PowerShell:
+```powershell
+docker run -d -p 8080:8080 -v ${PWD}/data:/app/data --name mcp-adapter ccr.ccs.tencentyun.com/cocofhu/mcp-adapter
+```
+
+启动后访问：**http://localhost:8080**
+
+### 从源码运行
 
 ```bash
+# 克隆项目
+git clone https://github.com/yourusername/mcp-adapter.git
+cd mcp-adapter
+
+# 安装依赖
+go mod download
+
+# 启动服务
 go run main.go
 ```
 
 服务将在 `http://localhost:8080` 启动。
 
-### 访问前端界面
+## 📖 使用流程
 
-打开浏览器访问 `http://localhost:8080`，即可使用 Web 界面管理应用、类型和接口。
+### 1️⃣ 创建应用
 
-详细使用说明请参考：
-- [前端使用指南](./FRONTEND_GUIDE.md)
-- [自定义类型指南](./CUSTOM_TYPE_GUIDE.md)
+在 Web 界面中创建一个新应用，例如 "天气 API"。
 
-### 运行测试
+### 2️⃣ 定义自定义类型（可选）
 
-**基础功能测试**:
+如果你的 API 使用复杂的数据结构，可以先定义自定义类型。
 
-Linux/Mac:
-```bash
-chmod +x test_api.sh
-./test_api.sh
+### 3️⃣ 配置 API 接口
+
+添加你的 HTTP API 接口配置：
+
+- **接口名称**: GetWeather
+- **URL**: https://api.weather.com/current
+- **方法**: GET
+- **参数**: 
+  - city (string, query, 必填)
+  - units (string, query, 可选)
+
+### 4️⃣ 连接到 AI 助手
+
+配置 Claude Desktop 或其他 MCP 客户端，连接到：
+```
+http://localhost:8080/mcp/your-app-path
 ```
 
-Windows:
-```powershell
-.\test_api.ps1
-```
+现在 AI 助手就可以调用你配置的 API 了！
 
-**自定义类型功能测试**:
+## 🎯 使用场景
 
-Linux/Mac:
-```bash
-chmod +x test_custom_types.sh
-./test_custom_types.sh
-```
+- 🤖 **AI 助手增强** - 让 Claude 等 AI 助手能够调用你的内部 API
+- 🔗 **API 聚合** - 将多个 API 统一管理和调用
+- 📝 **API 文档** - 可视化管理和展示 API 定义
+- 🧪 **快速原型** - 快速配置和测试 API 集成
 
-Windows:
-```powershell
-.\test_custom_types.ps1
-```
 
-## 📖 使用指南
+## 🔧 配置说明
 
-### 1. 创建应用
+### 环境变量
 
-```bash
-curl -X POST http://localhost:8080/api/applications \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My App",
-    "path": "myapp",
-    "protocol": "sse",
-    "enabled": true
-  }'
-```
+- `PORT` - 服务端口（默认: 8080）
+- `DB_TYPE` - 数据库类型：`sqlite` 或 `mysql`（默认: sqlite）
+- `DB_PATH` - SQLite 数据库文件路径（默认: ./data/mcp-adapter.db）
+- `DB_DSN` - MySQL 连接字符串（例如: `user:password@tcp(localhost:3306)/dbname?charset=utf8mb4&parseTime=True`）
 
-### 2. 创建自定义类型
+### 数据库支持
 
-**基础类型示例**:
+支持 **SQLite** 和 **MySQL** 两种数据库：
 
-```bash
-curl -X POST http://localhost:8080/api/custom-types \
-  -H "Content-Type: application/json" \
-  -d '{
-    "app_id": 1,
-    "name": "User",
-    "description": "用户信息",
-    "fields": [
-      {"name": "id", "type": "number", "required": true},
-      {"name": "name", "type": "string", "required": true},
-      {"name": "email", "type": "string", "required": false},
-      {"name": "tags", "type": "string", "is_array": true, "required": false}
-    ]
-  }'
-```
+#### 🗄️ SQLite（默认）
 
-**引用其他类型**:
+零配置，开箱即用，适合中小规模使用：
 
 ```bash
-# 先创建 Address 类型
-curl -X POST http://localhost:8080/api/custom-types \
-  -H "Content-Type: application/json" \
-  -d '{
-    "app_id": 1,
-    "name": "Address",
-    "fields": [
-      {"name": "street", "type": "string", "required": true},
-      {"name": "city", "type": "string", "required": true}
-    ]
-  }'
-
-# 创建引用 User 和 Address 的 UserProfile 类型
-curl -X POST http://localhost:8080/api/custom-types \
-  -H "Content-Type: application/json" \
-  -d '{
-    "app_id": 1,
-    "name": "UserProfile",
-    "fields": [
-      {"name": "user", "type": "custom", "ref": 1, "required": true},
-      {"name": "address", "type": "custom", "ref": 2, "required": false},
-      {"name": "friends", "type": "custom", "ref": 1, "is_array": true, "required": false}
-    ]
-  }'
+docker run -d \
+  -p 8080:8080 \
+  -v $(pwd)/data:/app/data \
+  ccr.ccs.tencentyun.com/cocofhu/mcp-adapter
 ```
 
-### 3. 创建接口
+**特点**：
+- ✅ 零配置，开箱即用
+- ✅ 轻量级，适合个人和小团队
+- ✅ 数据持久化，重启不丢失
+- ✅ 支持完整的 SQL 功能
+
+#### 🐬 MySQL
+
+适合生产环境和大规模使用：
 
 ```bash
-curl -X POST http://localhost:8080/api/interfaces \
-  -H "Content-Type: application/json" \
-  -d '{
-    "app_id": 1,
-    "name": "GetUser",
-    "protocol": "http",
-    "url": "https://api.example.com/users",
-    "method": "GET",
-    "auth_type": "none",
-    "parameters": [
-      {
-        "name": "id",
-        "type": "string",
-        "location": "query",
-        "required": true
-      }
-    ]
-  }'
+docker run -d \
+  -p 8080:8080 \
+  -e DB_TYPE=mysql \
+  -e DB_DSN="user:password@tcp(mysql-host:3306)/mcp_adapter?charset=utf8mb4&parseTime=True" \
+  ccr.ccs.tencentyun.com/cocofhu/mcp-adapter
 ```
 
-更多示例请参考 [API_EXAMPLES.md](./API_EXAMPLES.md)。
+**特点**：
+- ✅ 高性能，支持大规模并发
+- ✅ 适合生产环境和集群部署
+- ✅ 支持主从复制和高可用
+- ✅ 更好的数据安全性和备份能力
 
-## 📚 文档
+### Docker 数据持久化
 
-- [前端使用指南](./FRONTEND_GUIDE.md) - 前端界面使用说明
-- [API 使用示例](./API_EXAMPLES.md) - 完整的 API 使用示例
-- [数据库迁移指南](./MIGRATION.md) - 从旧版本迁移的指南
-- [重构总结](./REFACTORING_SUMMARY.md) - 项目重构的详细说明
-- [API 文档](./README-API.md) - 详细的 API 文档
-
-## 🏗️ 项目结构
-
-```
-mcp-adapter/
-├── backend/
-│   ├── adapter/          # MCP 协议适配器
-│   │   ├── mcp_model.go  # MCP 工具注册
-│   │   └── http_impl.go  # HTTP 请求构建
-│   ├── database/         # 数据库配置
-│   ├── handlers/         # HTTP 处理器
-│   │   ├── application.go
-│   │   ├── interface.go
-│   │   └── custom_type.go
-│   ├── models/           # 数据模型
-│   │   └── models.go
-│   ├── routes/           # 路由配置
-│   └── service/          # 业务逻辑
-│       ├── application_service.go
-│       ├── interface_service.go
-│       └── custom_type_service.go
-├── web/                  # 前端文件
-├── test_api.sh          # Linux/Mac 测试脚本
-├── test_api.ps1         # Windows 测试脚本
-└── main.go              # 入口文件
-```
-
-## 🔧 技术栈
-
-- **后端**: Go 1.21+
-- **Web 框架**: Gin
-- **ORM**: GORM
-- **数据库**: SQLite
-- **协议**: MCP (Model Context Protocol)
-
-## 📊 数据模型
-
-### Application (应用)
-- 管理多个独立的应用
-- 每个应用有独立的接口和类型定义
-
-### CustomType (自定义类型)
-- 定义可复用的复杂类型
-- 支持嵌套和引用
-
-### CustomTypeField (类型字段)
-- 定义类型包含的字段
-- 支持基本类型和自定义类型引用
-
-### Interface (接口)
-- HTTP 接口定义
-- 关联参数定义
-
-### InterfaceParameter (接口参数)
-- 接口的参数定义
-- 支持基本类型和自定义类型引用
-
-## 🎯 API 端点
-
-### 应用管理
-- `POST /api/applications` - 创建应用
-- `GET /api/applications` - 获取应用列表
-- `GET /api/applications/:id` - 获取单个应用
-- `PUT /api/applications/:id` - 更新应用
-- `DELETE /api/applications/:id` - 删除应用
-
-### 自定义类型
-- `POST /api/custom-types` - 创建自定义类型
-- `GET /api/custom-types?app_id=1` - 获取应用的类型列表
-- `GET /api/custom-types/:id` - 获取单个类型
-- `PUT /api/custom-types/:id` - 更新类型
-- `DELETE /api/custom-types/:id` - 删除类型
-
-### 接口管理
-- `POST /api/interfaces` - 创建接口
-- `GET /api/interfaces?app_id=1` - 获取应用的接口列表
-- `GET /api/interfaces/:id` - 获取单个接口
-- `PUT /api/interfaces/:id` - 更新接口
-- `DELETE /api/interfaces/:id` - 删除接口
-
-## 🔄 从旧版本迁移
-
-如果你正在从旧版本（使用 `Options` JSON 字段）迁移，请参考 [MIGRATION.md](./MIGRATION.md)。
-
-**快速迁移（开发环境）**:
-```bash
-# 删除旧数据库
-rm mcp-adapter.db
-
-# 重新启动，自动创建新表结构
-go run main.go
-```
-
-## 🧪 测试
-
-项目包含完整的 API 测试脚本：
+**SQLite 模式**：使用 volume 挂载保存数据
 
 ```bash
-# Linux/Mac
-./test_api.sh
-
-# Windows
-.\test_api.ps1
+docker run -d \
+  -p 8080:8080 \
+  -v /your/local/path:/app/data \
+  ccr.ccs.tencentyun.com/cocofhu/mcp-adapter
 ```
 
-测试覆盖：
-- ✅ 应用 CRUD
-- ✅ 自定义类型 CRUD
-- ✅ 接口 CRUD
-- ✅ 嵌套类型引用
-- ✅ 错误处理
-- ✅ 数据验证
+**MySQL 模式**：数据存储在 MySQL 服务器中，无需挂载本地目录
 
-## 🛠️ 开发计划
+## 🛠️ 技术栈
 
-- [x] 自定义类型系统
-- [x] 接口参数关联表
-- [x] 事务支持
-- [x] 引用完整性检查
-- [ ] 自定义类型递归展开（MCP Schema）
-- [ ] Path 参数支持
-- [ ] 更多认证方式
-- [ ] 接口版本管理
-- [ ] GraphQL 支持
-- [ ] 代码生成器
-
-## 📝 许可证
-
-MIT License
+- Go + Gin - 后端服务
+- SQLite - 数据存储
+- 原生 JavaScript - 前端界面
+- MCP Protocol - AI 助手协议
 
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
 
----
+## 📝 许可证
 
-**注意**: 本项目正在积极开发中，API 可能会有变化。
+MIT License
+
